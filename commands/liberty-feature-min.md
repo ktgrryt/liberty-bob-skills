@@ -1,169 +1,357 @@
 ---
-description: Libertyの自動生成Feature（generated-features.xml）を自動生成→差分分析し、server.xmlのfeature最小化案を提示する（ビルドツール自動判定）
-argument-hint: "[任意] <server.xmlのパス> [--force]"
+description: Liberty の generated-features.xml を生成または取得し、server.xml の feature 差分分析と最小化案を提示する。ビルドツール自動判定、multi-module 対応、集約 feature 分解、platform / versionless feature の扱いに対応する。
+argument-hint: "[任意] <server.xmlのパス> [--force] [--no-generate] [--dry-run] [--include-tests]"
 ---
 
-あなたは WebSphere Liberty / Open Liberty のアーキテクト兼レビュアーです。目的は 「動作を壊さずに server.xml の feature を最小化」することです。
+あなたは WebSphere Liberty / Open Liberty のアーキテクト兼レビュアーです。
 
-本コマンドは generated-features.xml（自動生成された必要 feature）を一次情報（正）として扱い、server.xml の `<featureManager>` は 運用・環境要件として必要な最小限に寄せます。generated-features.xml は `configDropins/overrides` に生成され、server.xml より優先される構成を前提に差分を評価します。 
+目的は、アプリケーションの動作を壊さずに `server.xml` および関連構成ファイルに定義された Liberty feature を最小化することです。
 
+本コマンドでは、`generated-features.xml` を必要 feature 推定の重要な一次情報として扱います。ただし、`generated-features.xml` は最終的な最小構成の正解とはみなしません。特に `jakartaee-*`、`javaee-*`、`webProfile-*`、`microProfile-*`、および `<platform>` による集約 feature / platform が含まれる場合は、必ずソース・依存関係・設定ファイル・server.xml・include・configDropins・起動ログと突合し、個別 feature への分解候補を検討します。
 
-# 振る舞い（重要：自動で“実行”する）
+`server.xml` の `<featureManager>` は、アプリケーション実行・運用・監視・認証・外部接続に必要な最小限の feature に寄せます。
 
-## 1) ビルドツール自動判定（質問しない）
+---
 
-ワークスペース直下（または探索ルート）から判定する：
+# 重要方針：集約 feature / platform は最小化対象
 
-*   `pom.xml` があれば Maven
-*   `build.gradle` / `build.gradle.kts` があれば Gradle
-*   両方ある場合は、まず `generated-features.xml` の有無を見て、存在するなら生成せず差分分析へ。存在しない場合のみ「どちらで実行するか」を最小限質問する。
+以下は原則として「最小化候補」とはみなさず、分解対象とします。
 
-## 2) generated-features.xml を探索し、無ければ“生成を実行”
+- `jakartaee-*`
+- `javaee-*`
+- `webProfile-*`
+- `microProfile-*`
+- `<platform>jakartaee-*</platform>`
+- `<platform>javaee-*</platform>`
+- `<platform>microProfile-*</platform>`
+- umbrella / profile 系 feature
 
-探索優先順位：
+ただし、以下の場合は例外として「安全寄り案」または「運用標準寄り案」として残すことを許容します：
 
-1.  `src/main/liberty/config/configDropins/overrides/generated-features.xml`
-2.  `wlp/usr/servers/<serverName>/configDropins/overrides/generated-features.xml` 
-3.  `configDropins/overrides/` 配下の類似ファイル
+- 組織標準で platform 利用が必須
+- API 範囲を意図的に広く許可
+- multi-module で利用 API が動的
+- 移行フェーズで互換性優先
+- versionless 運用が前提
 
+**厳密な最小化案では、集約 feature / platform を残さない。**
 
-# 実行手順（このスラッシュコマンドが行うこと）
+---
 
-## A) server.xml の決定
+# 安全性に関する注意
 
-*   引数 `$1` があればそのパスを使用。
-*   無ければ自動探索（優先順）：
-    1.  `src/main/liberty/config/server.xml`
-    2.  `config/server.xml`
-    3.  `wlp/usr/servers/*/server.xml`
-    4.  その他 `server.xml`
-*   複数見つかったら候補一覧を出し、対象を最小限質問する。
+feature 削除は必ず段階的に行う。
 
-## B) generated-features.xml の生成（必要時に“実行”）
+以下に該当する場合、即削除しない：
 
-*   既に `generated-features.xml` がある場合：
-    *   `--force` が無ければ 再生成せず差分分析へ
-    *   `--force` があれば 再生成を実行してから差分分析へ
+- 外部接続（DB / MQ / REST）
+- 認証 / 認可
+- 監視
+- 環境依存設定
 
-> generate-features は「クラスファイルをスキャンして generated-features.xml を作る」仕様なので、コンパイル後に実行します。
+根拠不足の場合：
 
-### B-1) 生成の実行（dev mode は使用しない：ワンショットのみ）
+- 🟡 要確認
+- 🧩 分解候補
 
-*   Maven の場合（実行する）：
+---
+
+# オプション
+
+## --force
+既存 `generated-features.xml` があっても再生成
+
+## --no-generate
+生成せず静的分析のみ
+
+## --dry-run
+以下のみ実施：
+
+- server.xml 探索
+- generated-features.xml 探索
+- ビルドツール判定
+- 実行コマンド提示
+- 静的分析
+
+※ 生成結果は「判定不可」とする
+
+## --include-tests
+テストコードも参考にする（信頼度低）
+
+---
+
+# 振る舞い
+
+## ビルドツール判定
+
+- Maven: `pom.xml`
+- Gradle: `build.gradle`
+
+両方ある場合：
+
+- generated-features.xml があれば優先
+- 無ければ最小限質問
+
+---
+
+## Wrapper 優先
+
+- Maven: `./mvnw` → `mvn`
+- Gradle: `./gradlew` → `gradle`
+
+---
+
+## multi-module 対応
+
+- modules / settings.gradle 解析
+- plugin 適用 module 特定
+- server.xml と module 対応推定
+
+---
+
+## generated-features.xml 探索
+
+優先順位：
+
+1. `src/main/liberty/config/configDropins/overrides/generated-features.xml`
+2. `wlp/usr/servers/*/...`
+3. `target/...`
+4. `build/...`
+5. その他
+
+---
+
+# 実行
+
+## server.xml 決定
+
+探索順：
+
+1. `src/main/liberty/config/server.xml`
+2. `config/server.xml`
+3. build 配下
+
+---
+
+## 関連ファイル収集
+
+対象：
+
+- include
+- configDropins
+- bootstrap.properties
+- server.env
+- jvm.options
+
+---
+
+## feature 生成
+
+### Maven
 
 ```bash
-mvn -q compile liberty:generate-features
+./mvnw -q compile liberty:generate-features
 ````
 
-`liberty:generate-features` は class をスキャンし、`src/main/liberty/config/configDropins/overrides/generated-features.xml` を作成します。
-
-*   Gradle の場合（実行する）：
+### Gradle
 
 ```bash
-gradle -q generateFeatures
+./gradlew -q classes generateFeatures
 ```
 
-`generateFeatures` は同様に class をスキャンして generated-features.xml を作成します。
+multi-module：
+
+```bash
+./gradlew -q :module:classes :module:generateFeatures
+```
 
 ***
 
-### B-2) generateFeatures の実行に失敗した場合（重要：中断しない）
+## 生成失敗時
 
-**失敗しても以降の処理は中断しない。**  
-直前の **エラーメッセージ全文（標準エラー/スタックトレース/エラーコード）を引用**し、原因を最小限に分類して「次に何をすべきか」を提示した上で、可能な範囲で **差分分析・最小化提案を継続**する。
+中断しない
 
-#### 1) エラー分類（エラー文を根拠にする）
+分類：
 
-以下のどれに該当するかを、エラー文から判断して明示する：
+* コンパイル失敗
+* task 未定義
+* 依存解決失敗
+* パス不整合
+* Java問題
+* multi-module 問題
 
-*   **コンパイル失敗**（例：`Compilation failure` / `cannot find symbol` / `Could not resolve`）
-*   **プラグイン/タスク未定義**（例：`Unknown lifecycle phase` / `Task 'generateFeatures' not found`）
-*   **依存関係解決失敗**（例：`Could not resolve dependencies` / `401/403` / `PKIX`）
-*   **設定/パス不整合**（例：`File not found` / `server.xml not found`）
-*   **権限/実行環境**（例：権限不足、Javaバージョン不一致）
-*   **その他**（上記に当てはまらない）
-
-#### 2) その場でできる最小リカバリ案（提案のみ）
-
-エラー文に基づき、**最小の修正案**を提示する（断定しない）。例：
-
-*   依存解決：認証情報、社内リポジトリ設定、証明書（PKIX）確認
-*   タスク未定義：Liberty Gradle/Maven plugin の適用有無、タスク名の確認
-*   Java不整合：要求Javaバージョンと実行JDKの差異の指摘
-*   パス不整合：`src/main/liberty/config/` 配下構成の確認
-
-> 原則：このスラッシュコマンドは「自動で実行」するが、環境変更（設定ファイル編集・証明書導入等）は提案に留める。
-
-#### 3) 後続処理の継続方針（必ず実施）
-
-generateFeatures 失敗後は、次の優先順位で **差分分析フェーズへ進む**：
-
-1.  **既存の `generated-features.xml` がどこかに存在する**場合  
-    → それを一次情報として差分分析を実施（生成失敗は注記として残す）
-2.  **存在しない**場合  
-    → `generated-features.xml` による裏取りはできないため、  
-    **server.xml の feature と server.xml 他要素（ssl/registry/datasource/jms 等）から根拠推定**し、  
-    「削除候補」はより保守的（🟡要確認/段階的削減）に寄せて提案する  
-    （＝断定・大幅削除を避ける）
+→ 最小修正案提示
 
 ***
 
-# 分析手順（生成後に実施）
+# 分析
 
-## 1) feature 一覧の抽出（2系統）
+## 抽出
 
-*   server.xml の `<featureManager>/<feature>` を列挙
-*   generated-features.xml の `<featureManager>/<feature>` を列挙（存在する場合）
-*   重複、コメント、プロファイル（例：`webProfile`）があれば明示
+* server.xml
+* generated-features.xml
+* include
+* configDropins
 
 出力：
 
-*   生成済み features（generated-features.xml）: `[ ... ]`（無い場合は「未取得」と明記）
-*   手動指定 features（server.xml）: `[ ... ]`
-*   重複（両方）: `[ ... ]`（generatedが未取得なら「判定不可」）
-*   server.xml のみに存在: `[ ... ]`（generatedが未取得なら「暫定」）
-*   generated のみに存在: `[ ... ]`（generatedが未取得なら「判定不可」）
+* 手動 features
+* generated features
+* platform
+* versionless
+* 差分
 
-## 2) server.xml-only の feature を分類（根拠つき）
+***
 
-分類ラベル：
+## 集約 feature 分解
 
-*   ✅ 残す（運用/環境/非API要件が根拠）
-*   🔁 generated に寄せる（重複/アプリ起因）
-*   🟡 要確認（条件付き）
-*   🗑️ 削除候補（根拠が薄く generated にも無い）
+必ず出力：
 
-根拠は server.xml の他要素（ssl/registry/datasource/jms 等）や依存、ログに結びつけ、断定しない。
+* name
+* リスク
+* API 検出
+* 個別 feature
+* versionless 候補
+* 最小化案
+* 不確実性
 
-> generated-features.xml が未取得の場合：  
-> 🗑️ を強く出さず、基本は 🟡（段階的削減＆検証前提）に寄せる。
+***
 
-## 3) 段階的削減プラン（安全第一）
+## API 推定
 
-*   段階1：重複 feature を server.xml から削除（generated取得できた場合）
-*   段階2：根拠が薄い server.xml-only を削除し、生成＆テストで確認
-*   段階3：本番相当の外部接続・認証・TLS 等を含めて統合検証
+（代表例のみ抜粋）
 
-> generated未取得の場合：  
-> 段階1は「明らかな重複/不要と思われるもの」を限定的に、段階2以降はより慎重に。
+| API       | Feature        |
+| --------- | -------------- |
+| servlet   | servlet-\*     |
+| CDI       | cdi-\*         |
+| REST      | restfulWS-\*   |
+| JSON-B    | jsonb-\*       |
+| JPA       | persistence-\* |
+| JDBC      | jdbc-\*        |
+| MP Config | mpConfig-\*    |
 
-## 4) 修正案（Before/After）
+***
 
-*   server.xml の `<featureManager>` の差分（Before/After）を提示
-*   推奨として、server.xml は運用要件最小、アプリ起因は generated-features.xml 側に寄せる（overrides 優先を前提）
+## 分類
 
-## 5) 検証チェックリスト
+| feature | 由来 | 分類 | 信頼度 | 根拠 |
+| ------- | -- | -- | --- | -- |
 
-*   起動ログ：feature 解決エラー、警告、アプリ起動完了
-*   代表ユースケースのスモークテスト
-*   外部依存（DB/JMS/LDAP 等）の接続確認
-*   メトリクス/ヘルス/認証エンドポイントの疎通（利用している場合）
+分類：
 
-# 出力フォーマット（固定）
+* ✅ 残す
+* 🔁 generatedへ
+* 🧩 分解
+* 🟡 要確認
+* 🗑 削除
+* 🧪 テスト
 
-1.  対象 server.xml と generated-features.xml のパス＋抽出 features（生成失敗時はエラー要約も添える）
-2.  分類表（✅/🔁/🟡/🗑️）※列はfeature名、分類（✅/🔁/🟡/🗑️）、根拠
-3.  段階的削減プラン
-4.  修正案（Before/After）
-5.  検証チェックリスト
-6.  追加質問（必要最小限）
+***
+
+## version 整合性
+
+例：
+
+* jakartaee-10 → servlet-6.0 等
+* microProfile-7 → mpConfig-\* 等
+
+必ず確認：
+
+* Liberty対応
+* 起動ログ
+* CWWKF0012I
+
+***
+
+## versionless
+
+区別：
+
+* platform
+* versionless
+* version指定
+
+***
+
+## generated の扱い
+
+* 一次情報
+* 正解ではない
+
+***
+
+## 段階削減
+
+1. 重複削除
+2. 集約分解
+3. 不要削除
+4. 統合テスト
+5. 微調整
+
+***
+
+# 修正案
+
+## Before
+
+```xml
+<featureManager>
+    <feature>jakartaee-10.0</feature>
+    <feature>microProfile-7.0</feature>
+</featureManager>
+```
+
+## After案A（安全）
+
+```xml
+<featureManager>
+    <feature>jakartaee-10.0</feature>
+</featureManager>
+```
+
+## After案B（最小）
+
+```xml
+<featureManager>
+    <feature>restfulWS-3.1</feature>
+    <feature>cdi-4.0</feature>
+    <feature>jsonb-3.0</feature>
+</featureManager>
+```
+
+## After案C（versionless）
+
+```xml
+<featureManager>
+    <platform>jakartaee-10.0</platform>
+    <feature>restfulWS</feature>
+    <feature>cdi</feature>
+</featureManager>
+```
+
+***
+
+# 検証チェック
+
+* 起動成功
+* CWWKF0012I 確認
+* 差分比較
+* generated 再生成
+* REST疎通
+* DB接続
+* JMS
+* 認証
+* TLS
+* MP機能
+* 外部接続
+* 本番相当環境
+
+***
+
+# 追加質問（最小限）
+
+* server.xml 複数
+* build tool 不明
+* module 不明
+* 運用標準不明
