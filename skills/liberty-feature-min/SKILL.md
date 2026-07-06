@@ -6,7 +6,7 @@ description: >-
   feature の扱いに対応する。
 metadata:
   user-invocable: true
-  disable-model-invocation: true
+  disable-model-invocation: false
   argument-hint: '[任意] <server.xmlのパス> [--force] [--no-generate] [--dry-run] [--include-tests]'
 ---
 
