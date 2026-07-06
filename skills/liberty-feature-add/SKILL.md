@@ -6,7 +6,7 @@ description: >-
   検証手順）を提示・適用する
 metadata:
   user-invocable: true
-  disable-model-invocation: true
+  disable-model-invocation: false
   argument-hint: <機能名>
 ---
 
