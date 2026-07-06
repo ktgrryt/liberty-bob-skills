@@ -5,7 +5,7 @@ description: >-
   ドライバー追加→Liberty へコピー→server.xml に library/jdbcDriver/dataSource 追加→接続チェック）
 metadata:
   user-invocable: true
-  disable-model-invocation: true
+  disable-model-invocation: false
   argument-hint: >-
     <dbType> <host[:port]> <dbName> <user> <password|env:VAR|prompt> [任意]
     <server.xmlパス>
