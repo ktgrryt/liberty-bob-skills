@@ -5,7 +5,7 @@ description: >-
   エンドポイント一覧と「どの設定がそのパスを決めているか」を対応付けて可視化し、curl/httpie 例と 404/405 の原因候補まで提示する
 metadata:
   user-invocable: true
-  disable-model-invocation: true
+  disable-model-invocation: false
   argument-hint: '[任意] <探索ルート(デフォルト: .)>'
 ---
 
