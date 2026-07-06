@@ -6,7 +6,7 @@ description: >-
   server.env / bootstrap.properties）案も提示する。
 metadata:
   user-invocable: true
-  disable-model-invocation: true
+  disable-model-invocation: false
   argument-hint: '[任意] <探索ルート or server.xmlのパス>'
 ---
 
