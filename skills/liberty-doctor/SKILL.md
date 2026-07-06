@@ -3,7 +3,7 @@ name: liberty-doctor
 description: Libertyプロジェクト全体を一発健康診断（設定/ビルド/ログ/よくある起動失敗原因/軽いfeatureチェック）。
 metadata:
   user-invocable: true
-  disable-model-invocation: true
+  disable-model-invocation: false
   argument-hint: '[任意] <探索ルート or server.xmlパス>'
 ---
 
