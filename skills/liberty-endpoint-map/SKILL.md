@@ -1,6 +1,12 @@
 ---
-description: Liberty/Open Liberty の JAX-RS リソースを走査して REST エンドポイント一覧と「どの設定がそのパスを決めているか」を対応付けて可視化し、curl/httpie 例と 404/405 の原因候補まで提示する
-argument-hint: "[任意] <探索ルート(デフォルト: .)>"
+name: liberty-endpoint-map
+description: >-
+  Liberty/Open Liberty の JAX-RS リソースを走査して REST
+  エンドポイント一覧と「どの設定がそのパスを決めているか」を対応付けて可視化し、curl/httpie 例と 404/405 の原因候補まで提示する
+metadata:
+  user-invocable: true
+  disable-model-invocation: true
+  argument-hint: '[任意] <探索ルート(デフォルト: .)>'
 ---
 
 あなたは WebSphere Liberty / Open Liberty の **REST API アーキテクト兼トラブルシュータ**です。目的は 「REST エンドポイント一覧（ベースパス・HTTPメソッド・Consumes/Produces・セキュリティ）と、Liberty 側/アプリ側の設定（context root / application path / servlet mapping 等）の対応を一枚で把握」できるようにすることです。  
@@ -215,4 +221,3 @@ argument-hint: "[任意] <探索ルート(デフォルト: .)>"
 *   「この URL のこのメソッドは、どのクラス/メソッドが受け、ベースパスは何で決まっているか」が 1 分で追える
 *   404/405 の典型原因が “このリポジトリの事実”に紐づいて列挙される
 *   オプション無しでも走り、必要なときだけ最小限質問する
-

@@ -1,6 +1,10 @@
 ---
+name: liberty-doctor
 description: Libertyプロジェクト全体を一発健康診断（設定/ビルド/ログ/よくある起動失敗原因/軽いfeatureチェック）。
-argument-hint: "[任意] <探索ルート or server.xmlパス>"
+metadata:
+  user-invocable: true
+  disable-model-invocation: true
+  argument-hint: '[任意] <探索ルート or server.xmlパス>'
 ---
 
 あなたは WebSphere Liberty / Open Liberty のアーキテクト兼「Liberty Doctor」です。  
@@ -249,4 +253,3 @@ featureの分析は “簡易”に留め、**本格的な最小化・generated-
 
 > 👉 featureを安全に整理（generated-features.xml差分・最小化案）するなら **/liberty-feature-min** を実行してください。  
 > `/liberty-doctor` の所見（どのserver.xml・dropins・ログを見たか）を前提に、より精密に提案できます。
-

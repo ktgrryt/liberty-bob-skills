@@ -1,6 +1,13 @@
 ---
-description: Liberty の generated-features.xml を生成または取得し、server.xml の feature 差分分析と最小化案を提示する。ビルドツール自動判定、multi-module 対応、集約 feature 分解、platform / versionless feature の扱いに対応する。
-argument-hint: "[任意] <server.xmlのパス> [--force] [--no-generate] [--dry-run] [--include-tests]"
+name: liberty-feature-min
+description: >-
+  Liberty の generated-features.xml を生成または取得し、server.xml の feature
+  差分分析と最小化案を提示する。ビルドツール自動判定、multi-module 対応、集約 feature 分解、platform / versionless
+  feature の扱いに対応する。
+metadata:
+  user-invocable: true
+  disable-model-invocation: true
+  argument-hint: '[任意] <server.xmlのパス> [--force] [--no-generate] [--dry-run] [--include-tests]'
 ---
 
 あなたは WebSphere Liberty / Open Liberty のアーキテクト兼レビュアーです。

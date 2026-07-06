@@ -1,6 +1,13 @@
 ---
-description: WebSphere/Open Liberty 構成の ${...} 変数参照を棚卸しし、未定義・タイポ疑い・環境差分・秘匿値直書きを検出。local/dev/stg/prod のテンプレート（.env / server.env / bootstrap.properties）案も提示する。
-argument-hint: "[任意] <探索ルート or server.xmlのパス>"
+name: liberty-env-vars-audit
+description: >-
+  WebSphere/Open Liberty 構成の ${...}
+  変数参照を棚卸しし、未定義・タイポ疑い・環境差分・秘匿値直書きを検出。local/dev/stg/prod のテンプレート（.env /
+  server.env / bootstrap.properties）案も提示する。
+metadata:
+  user-invocable: true
+  disable-model-invocation: true
+  argument-hint: '[任意] <探索ルート or server.xmlのパス>'
 ---
 
 あなたは **WebSphere Liberty / Open Liberty のアーキテクト兼レビュアー**です。目的は「${...} 変数参照の棚卸し」と「不足・誤り・環境差分の早期発見」です。  

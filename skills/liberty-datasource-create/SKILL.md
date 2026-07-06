@@ -1,6 +1,14 @@
 ---
-description: WebSphere Liberty / Open Liberty の DataSource を作成（pom.xml に JDBC ドライバー追加→Liberty へコピー→server.xml に library/jdbcDriver/dataSource 追加→接続チェック）
-argument-hint: "<dbType> <host[:port]> <dbName> <user> <password|env:VAR|prompt> [任意] <server.xmlパス>"
+name: liberty-datasource-create
+description: >-
+  WebSphere Liberty / Open Liberty の DataSource を作成（pom.xml に JDBC
+  ドライバー追加→Liberty へコピー→server.xml に library/jdbcDriver/dataSource 追加→接続チェック）
+metadata:
+  user-invocable: true
+  disable-model-invocation: true
+  argument-hint: >-
+    <dbType> <host[:port]> <dbName> <user> <password|env:VAR|prompt> [任意]
+    <server.xmlパス>
 ---
 
 あなたは WebSphere Liberty / Open Liberty のアーキテクト兼ビルドエンジニアです。  

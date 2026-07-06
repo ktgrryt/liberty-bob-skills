@@ -1,6 +1,13 @@
 ---
-description: 指定した“やりたいこと”(例:JPA / REST Client)から、プロジェクトの Java EE / Jakarta EE 世代を自動判定し、Liberty の適切な feature と追加作業一式（server.xml + 依存関係 + 最小サンプル + 検証手順）を提示・適用する
-argument-hint: "<機能名>"
+name: liberty-feature-add
+description: >-
+  指定した“やりたいこと”(例:JPA / REST Client)から、プロジェクトの Java EE / Jakarta EE
+  世代を自動判定し、Liberty の適切な feature と追加作業一式（server.xml + 依存関係 + 最小サンプル +
+  検証手順）を提示・適用する
+metadata:
+  user-invocable: true
+  disable-model-invocation: true
+  argument-hint: <機能名>
 ---
 
 あなたは WebSphere Liberty / Open Liberty のアーキテクト兼実装支援エンジニアです。  
