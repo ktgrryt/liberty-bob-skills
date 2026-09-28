@@ -287,32 +287,6 @@ liberty-doctor を実行して
 この Liberty プロジェクトを診断して
 ```
 
-## 開発者向け
-
-### 共通の参照資料（`shared/`）
-
-複数の Skill で使う参照資料（server.xml の決め方、feature の対応表、変数の優先順位）は `shared/` に置き、各 Skill の `reference/` にコピーしています。Skill のフォルダは 1 つずつコピーして使われるため、別のフォルダを参照できないからです。
-
-* **編集するのは `shared/` のファイルだけ** にしてください。`skills/*/reference/` のコピーは直接編集しないでください（先頭にその旨のコメントがあります）
-* どのファイルをどの Skill にコピーするかは `shared/targets.txt` に書きます
-* `shared/` や `shared/targets.txt` を変えたら、次を実行してコピーを更新します
-
-```bash
-tools/sync-shared.sh          # コピーを更新する（targets.txt から外したものは削除する）
-tools/sync-shared.sh --check  # コピーが shared/ とずれていないか確認する（ずれていれば終了コード 1）
-```
-
-### テスト
-
-```bash
-tests/run.sh               # Skill の形式、shared/ の同期、スクリプトのテスト
-tests/run.sh --with-maven  # 上に加えて、本物の liberty:generate-features も試す
-```
-
-GitHub Actions（`.github/workflows/ci.yml`）でも、push と pull request のたびに同じものを実行します。
-
-Bob で各 Skill を動かしたときの結果は自動では確かめられないので、問題をわざと入れたサンプルプロジェクト（`tests/fixtures/sample-app`）で手動で確認します。手順と期待する結果は `tests/manual/sample-app.md` にあります。詳しくは `tests/README.md` を見てください。
-
 ## 貢献
 
 バグ報告や機能追加の提案は、Issue またはプルリクエストでお願いします。

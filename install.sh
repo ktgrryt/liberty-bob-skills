@@ -60,8 +60,9 @@ for name in $names; do
   esac
 done
 
-# 共通の参照資料のコピーが古いまま入らないように確かめる（開発中のリポジトリから入れる場合）
-if ! "$repo/tools/sync-shared.sh" --check > /dev/null 2>&1; then
+# 共通の参照資料のコピーが古いまま入らないように確かめる（開発中のリポジトリから入れる場合。
+# tools/ は GitHub に置いていないので、clone したものから入れる場合は確かめない）
+if [ -x "$repo/tools/sync-shared.sh" ] && ! "$repo/tools/sync-shared.sh" --check > /dev/null 2>&1; then
   echo "注意: skills/*/reference/ が shared/ と一致していません。tools/sync-shared.sh を実行してから入れ直すことをおすすめします" >&2
 fi
 

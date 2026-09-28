@@ -1,2 +1,9 @@
-# サンプルプロジェクトで Maven を実行したときの出力
-tests/fixtures/*/target/
+# GitHub には、Skill を使うのに必要なもの（skills/、README.md、install.sh）だけを置く。
+# 次は開発用なので、手元にだけ置く（説明は tools/README.md）
+shared/
+tools/
+tests/
+.github/
+
+# macOS が作るファイル
+.DS_Store
