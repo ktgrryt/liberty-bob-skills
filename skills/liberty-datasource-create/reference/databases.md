@@ -40,3 +40,4 @@ Liberty の推奨に従い、DB 専用の `properties.*` 要素があればそ�
 ## 4) DB ごとの注意
 
 *   SQL Server：mssql-jdbc 10 以降は既定で `encrypt=true` なので、自己署名証明書の DB では接続チェックが `SSL` になる。開発環境に限り `trustServerCertificate=true` を案内する
+*   MySQL：MySQL 8 の既定の認証方式（`caching_sha2_password`）では、TLS を使わない接続で `Public Key Retrieval is not allowed` になることがある（接続チェックは `UNKNOWN` になる）。開発環境に限り `allowPublicKeyRetrieval=true`（接続チェックの URL は `?allowPublicKeyRetrieval=true`、server.xml は `<properties>` の属性）を案内する。本番では DB 側で TLS を有効にする

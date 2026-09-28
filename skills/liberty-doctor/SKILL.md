@@ -96,7 +96,7 @@ featureの分析は “簡易”に留め、**本格的な最小化・generated-
     1.  configDropins/defaults（あれば）
     2.  server.xml
     3.  configDropins/overrides（あれば）
-    *   追加の `<include>` / `<includeOptional>` があれば、その参照先
+    *   追加の `<include>`（`optional="true"` を含む）があれば、その参照先
 *   「どこに何が書いてあるか」：
     *   例：HTTPポートはどのファイル、SSLはどのファイル、アプリ定義はどのファイル…
 *   **configDropins/overrides や pom.xml の `liberty.var.*` によって、server.xml の内容が上書きされる**可能性を指摘

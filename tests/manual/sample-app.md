@@ -108,4 +108,5 @@
 - [ ] `jndiName="jdbc/orders"` が既にあるので、新しく追加せず「既存を更新するか」を質問する
 - [ ] パスワードをチャットで求めない
 - [ ] 更新する場合、server.xml の password は `${env.DB_PASSWORD}` にする（平文を書かない）
+- [ ] 更新する場合、authData を `containerAuthDataRef` で参照し、`<connectionManager enableContainerAuthForDirectLookups="true"/>` を入れる
 - [ ] `src/` に JAR を置かない（`copyDependencies` を使う）

@@ -57,6 +57,10 @@ run() { out=$(cd "$P" && java "$GRF" "$@" 2>&1); code=$?; }
 run_build() { run --server-xml src/main/liberty/config/server.xml --out target/lfm -- ./fake-build.sh; }
 wait_started() { for _ in $(seq 1 150); do [ -f "$WORK/started" ] && return 0; sleep 0.1; done; return 1; }
 
+# 更新日時を古くしておき、元に戻したときに更新日時も戻るかを確かめる（ref より新しいファイルがあれば戻っていない）
+find "$P/src" -type f -exec touch -t 202001010000 {} +
+touch -t 202001010100 "$WORK/ref"
+
 BEFORE=$(snapshot "$P/src")
 
 section "正常に生成する"
@@ -73,6 +77,8 @@ LOG=$(cat "$P/target/lfm/build.log")
 expect_line "ビルド中は server.xml の 3 つの feature が外れている" "$LOG" "marks=3"
 expect_line "コメント内の feature には手を付けない（コメントが入れ子にならない）" "$LOG" "nested=0"
 expect_same_tree "ソースツリーが元どおり（CRLF・権限を含む）" "$BEFORE" "$P/src"
+newer=$(find "$P/src" -type f -newer "$WORK/ref")
+[ -z "$newer" ] && pass "更新日時も元どおり（前回の結果を再利用できる）" || fail "更新日時が変わった" "$newer"
 [ ! -d "$P/target/lfm/backup" ] && pass "バックアップを削除する" || fail "バックアップが残っている"
 
 section "ビルドが失敗する"
@@ -105,6 +111,20 @@ expect_line "RESULT=INTERRUPTED" "$out" "RESULT=INTERRUPTED"
 expect_line "止められたときの結果は使わない" "$out" "REQUIRED=NONE"
 expect_same_tree "ソースツリーが元どおり" "$BEFORE" "$P/src"
 
+section "sh -c でまとめたビルドを止めたときは、子のプロセスも止める"
+rm -f "$WORK/started" "$WORK/stop"
+(cd "$P" && FAKE_WAIT=1 exec java "$GRF" --server-xml src/main/liberty/config/server.xml --out target/lfm \
+  -- sh -c "./fake-build.sh && true" > "$WORK/sh.txt" 2>&1) &
+JPID=$!
+wait_started && kill -TERM $JPID
+wait $JPID
+# 子のプロセスが残っていれば、stop ファイルができた後に generated-features.xml を書く
+touch "$WORK/stop"
+sleep 1
+out=$(cat "$WORK/sh.txt")
+expect_line "RESULT=INTERRUPTED" "$out" "RESULT=INTERRUPTED"
+expect_same_tree "止めた後に子のプロセスがファイルを書かない" "$BEFORE" "$P/src"
+
 section "SIGKILL（強制終了）の後に --restore で戻す"
 rm -f "$WORK/started" "$WORK/stop"
 (cd "$P" && FAKE_WAIT=1 exec java "$GRF" --server-xml src/main/liberty/config/server.xml --out target/lfm -- ./fake-build.sh > /dev/null 2>&1) &
@@ -117,9 +137,10 @@ if grep -q 'liberty-feature-min:' "$C/server.xml"; then pass "強制終了する
 run_build
 expect_exit "戻っていない状態での再実行は終了コード 2" $code 2
 expect_line "PREVIOUS_RUN_NOT_RESTORED を返す" "$out" "CATEGORY=PREVIOUS_RUN_NOT_RESTORED"
-expect_match "戻すためのコマンドを示す" "$out" '^RESTORE_COMMAND=java GenerateRequiredFeatures.java --restore '
-run --restore target/lfm
-expect_line "--restore で戻す" "$out" "RESULT=RESTORED"
+expect_match "戻すためのコマンドにスクリプトの場所を含める" "$out" '^RESTORE_COMMAND=java ".*/GenerateRequiredFeatures.java" --restore '
+restore_cmd=$(printf '%s\n' "$out" | sed -n 's/^RESTORE_COMMAND=//p')
+out=$(cd "$P" && eval "$restore_cmd" 2>&1)
+expect_line "示されたコマンドをそのまま実行して戻せる" "$out" "RESULT=RESTORED"
 expect_same_tree "ソースツリーが元どおり" "$BEFORE" "$P/src"
 run --restore target/lfm
 expect_line "戻すものが無ければ NOTHING_TO_RESTORE" "$out" "RESULT=NOTHING_TO_RESTORE"
@@ -133,6 +154,8 @@ run --server-xml src/main/liberty/config/server.xml --out src/main/liberty/confi
 expect_line "出力先が構成ディレクトリの中なら拒否する" "$out" "CATEGORY=BAD_OUT_DIR"
 run --server-xml no/such/server.xml --out target/lfm -- ./fake-build.sh
 expect_line "server.xml が無ければ止める" "$out" "CATEGORY=SERVER_XML_NOT_FOUND"
+run --server-xml src/main/liberty/config/server.xml --out target/lfm --timeout-minutes 0 -- ./fake-build.sh
+expect_exit "制限時間が 1 分未満なら終了コード 2" $code 2
 cp "$C/extra.xml" "$WORK/extra.bak"
 printf '<!-- liberty-feature-min: leftover -->\n' >> "$C/extra.xml"
 run_build
@@ -148,6 +171,20 @@ if javac --release 8 -Xlint:-options -d "$WORK/classes" "$GRF" 2>/dev/null; then
   expect_same_tree "ソースツリーが元どおり" "$BEFORE" "$P/src"
 else
   fail "--release 8 でコンパイルできない"
+fi
+
+# 権限を変えるので、偽のプロジェクトを使うテストの最後に置く
+section "書き換えに失敗する（読み取り専用のファイル）"
+chmod 444 "$C/extra.xml"
+if [ -w "$C/extra.xml" ]; then
+  echo "  skip  root で実行しているので、読み取り専用のファイルに書けてしまう"
+else
+  BEFORE_RO=$(snapshot "$P/src")
+  run_build
+  expect_exit "終了コード 2" $code 2
+  expect_line "IO_ERROR を返す" "$out" "CATEGORY=IO_ERROR"
+  expect_line "RESULT=ERROR（BUILD_FAILED ではない）" "$out" "RESULT=ERROR"
+  expect_same_tree "ソースツリーが元どおり" "$BEFORE_RO" "$P/src"
 fi
 
 if [ "$WITH_MAVEN" -eq 1 ]; then

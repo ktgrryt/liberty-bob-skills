@@ -45,6 +45,22 @@ expect_line "接続拒否は NETWORK" "$out" "CATEGORY=NETWORK"
 run "jdbc:postgresql://nonexistent.invalid:5432/db" app PW_OK 3
 expect_line "ホスト名を解決できなければ DNS" "$out" "CATEGORY=DNS"
 
+section "--env-file（server.env の形式）から読む"
+ENV_PW='pa$$w0rd&x'
+# この値のパスワードで H2 のファイル DB を作っておく
+PW_ENVFILE_INIT="$ENV_PW" java -cp "$CP" "$PING" "jdbc:h2:$WORK/envdb" sa PW_ENVFILE_INIT > /dev/null 2>&1
+printf '# comment\r\nOTHER=1\r\nDB_PW_IN_FILE=old\r\nDB_PW_IN_FILE=%s\r\n' "$ENV_PW" > "$WORK/server.env"
+run --env-file "$WORK/server.env" "jdbc:h2:$WORK/envdb" sa DB_PW_IN_FILE
+expect_line "\$ や & を含む値をそのまま使う（CRLF、コメント行、同じ名前は後のもの）" "$out" "RESULT=OK"
+expect_line "どこから読んだかを示す" "$out" "PASSWORD_SOURCE=$WORK/server.env"
+expect_no_match "パスワードを表示しない" "$out" 'pa\$\$w0rd'
+run --env-file "$WORK/server.env" "jdbc:h2:mem:t" sa PW_OK
+expect_line "環境変数があればそちらを使う" "$out" "PASSWORD_SOURCE=environment"
+run --env-file "$WORK/server.env" "jdbc:h2:mem:t" sa NOT_IN_ENV_OR_FILE
+expect_line "ファイルにも無ければ PASSWORD_ENV_NOT_SET" "$out" "CATEGORY=PASSWORD_ENV_NOT_SET"
+run --env-file "$WORK/no-such.env" "jdbc:h2:mem:t" sa NOT_IN_ENV_OR_FILE
+expect_line "ファイルを読めなければ ENV_FILE_NOT_READABLE" "$out" "CATEGORY=ENV_FILE_NOT_READABLE"
+
 section "パスワードを表示しない"
 export PW_LEAK=LeakyPw987
 run "jdbc:h2:file:$WORK/LeakyPw987/db;IFEXISTS=TRUE" sa PW_LEAK

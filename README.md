@@ -150,7 +150,7 @@ liberty-feature-min で、前回の結果を使わずに生成し直して（--f
 **主な機能**:
 
 * アプリが使う API から見た必要な feature の一覧を生成（Maven / Gradle 対応。Skill のフォルダにある `scripts/GenerateRequiredFeatures.java` を使います。JDK が必要です）
-  * 生成のあいだ、書かれている feature を一時的に外し、終了時に必ず元に戻します（失敗した場合や Ctrl+C で止めた場合も含む）
+  * 生成のあいだ、書かれている feature を一時的に外し、終了時に必ず元に戻します（失敗した場合や Ctrl+C で止めた場合も含む。ファイルの更新日時も元に戻します）
   * 使っていない feature の検出や、versionless の構成での生成にも対応します
 * server.xml との差分分析
 * 削除候補・残すべき feature の分類
@@ -231,7 +231,7 @@ liberty-datasource-create で MySQL（db.example.com、DB: mydb、ユーザー: 
 
 * JDBC ドライバーを pom.xml に追加（`provided` スコープ）
 * liberty-maven-plugin の `copyDependencies` で、ドライバーをサーバへコピーする設定を追加
-* server.xml への library / jdbcDriver / authData / dataSource の追加（パスワードは `${env.VAR}` で参照）
+* server.xml への library / jdbcDriver / authData / dataSource の追加（パスワードは `${env.VAR}` で参照。`InitialContext.lookup` などの直接ルックアップでも authData が使われるように設定）
 * 接続チェックの自動実行（Skill のフォルダにある `scripts/JdbcPing.java` を使います。JDK が必要です）
 
 ***

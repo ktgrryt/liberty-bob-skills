@@ -39,5 +39,5 @@ server.xml と同じディレクトリ（`${server.config.dir}`）にある次�
 *   `configDropins/overrides/*.xml`：server.xml より **後** に読まれ、server.xml の内容より **優先** される
     *   各ディレクトリの中は、ファイル名のアルファベット順に読まれる
     *   `generated-features.xml`（generate-features の出力）や `liberty-plugin-variable-config.xml`（pom.xml の `liberty.var.*` から生成される）もここに置かれる
-*   `<include>` / `<includeOptional>` の参照先
+*   `<include>` の参照先（`optional="true"` のものは、参照先が無くても起動できる）
     *   `${...}` 変数を使った参照先は、変数を解決できる範囲で読む

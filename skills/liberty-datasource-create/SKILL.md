@@ -206,6 +206,10 @@ DB の種類ごとの Maven 座標・既定ポート・JAR 名のパターン・
     *   `jndiName="jdbc/{dbName}"`
     *   `jdbcDriverRef="jdbcDriver-{dbType}"`
     *   `containerAuthDataRef="dbAuth-..."`
+*   `<connectionManager enableContainerAuthForDirectLookups="true"/>` を入れる
+    *   `containerAuthDataRef` が使われるのは、`res-auth=CONTAINER` のリソース参照（`@Resource` による注入や、web.xml の `<resource-ref>`）で取得したときだけ
+    *   リソース参照を使わない直接ルックアップ（`new InitialContext().lookup("jdbc/mydb")` など）は、既定ではアプリケーション認証になり（`enableContainerAuthForDirectLookups` の既定値は `false`）、authData のユーザーとパスワードが使われない。どちらの取得方法でも authData が使われるように、この設定を入れる
+    *   既存の dataSource を更新する場合で、既に `connectionManager` / `connectionManagerRef` があれば、そちらに属性を追加する
 *   接続プロパティは `reference/databases.md` の「2) server.xml の接続プロパティ」の要素を使う
 
 例：
@@ -215,6 +219,8 @@ DB の種類ごとの Maven 座標・既定ポート・JAR 名のパターン・
 
 <dataSource id="ds-postgres-mydb" jndiName="jdbc/mydb" jdbcDriverRef="jdbcDriver-postgres"
             containerAuthDataRef="dbAuth-postgres-mydb">
+  <!-- Use the authData above also for direct JNDI lookups -->
+  <connectionManager enableContainerAuthForDirectLookups="true"/>
   <properties.postgresql serverName="db.example.com" portNumber="5432" databaseName="mydb"/>
 </dataSource>
 ```
@@ -235,13 +241,16 @@ DB の種類ごとの Maven 座標・既定ポート・JAR 名のパターン・
     ```bash
     [ -n "$DB_PASSWORD" ] && echo set || echo unset
     ```
-    *   使えないが `src/main/liberty/config/server.env` に定義がある場合は、そのファイルを読み込んでから実行する（例：`set -a; . src/main/liberty/config/server.env; set +a; <コマンド>`）
+    *   使えないが `src/main/liberty/config/server.env` に定義がある場合は、手順 4 で `--env-file src/main/liberty/config/server.env` を付ける。JdbcPing が環境変数の次にそのファイルから値を読む
+    *   **server.env をシェルで読み込まない**（`. server.env` や `source`、`set -a` など）。値の `$` や `&`、引用符などがシェルに解釈され、別のパスワードになったり、別のコマンドとして実行されたりする
     *   どちらにも無い場合は、接続チェックを省略し、ユーザーが自分で実行するためのコマンドを提示する
-3.  ドライバー JAR を一時ディレクトリに取得する（`src/` には置かない）
+3.  ドライバー JAR を一時ディレクトリに取得する（`src/` には置かない）。Step 2 で pom.xml に追加したドライバーを、プロジェクトで解決されるバージョンのまま取得する（BOM で管理されていてもバージョンを調べなくてよい）。`./mvnw` が無ければ `mvn` を使う
     ```bash
-    ./mvnw -q dependency:copy -Dartifact=org.postgresql:postgresql:<version> -DoutputDirectory=target/jdbc-ping
+    ./mvnw -q dependency:copy-dependencies -DincludeGroupIds=org.postgresql -DincludeArtifactIds=postgresql \
+        -DoutputDirectory=target/jdbc-ping
     ```
-4.  実行する（`<JdbcPing.java>` は手順 1 で見つけたパス）。第 3 引数はパスワードそのものではなく **環境変数の名前**
+    *   プロジェクトの依存を解決できずに失敗する場合（multi-module で、ほかのモジュールがまだビルドされていないなど）は、pom.xml に書いた（または BOM で決まる）バージョンを指定して取得する：`./mvnw -q dependency:copy -Dartifact=org.postgresql:postgresql:<version> -DoutputDirectory=target/jdbc-ping`
+4.  実行する（`<JdbcPing.java>` は手順 1 で見つけたパス）。第 3 引数はパスワードそのものではなく **環境変数の名前**。手順 2 で server.env から読むと決めた場合は、`<JdbcPing.java>` の後に `--env-file src/main/liberty/config/server.env` を付ける
     *   Java 11 以上（ソースファイルをそのまま実行できる）：
         ```bash
         java -cp "target/jdbc-ping/*" <JdbcPing.java> "<jdbcUrl>" "<user>" DB_PASSWORD
@@ -253,6 +262,7 @@ DB の種類ごとの Maven 座標・既定ポート・JAR 名のパターン・
         ```
     *   第 4 引数でタイムアウトの秒数を指定できる（既定は 10 秒）
 5.  出力（`KEY=VALUE` 形式）を読んで結果を提示する。パスワードは出力されない（エラーメッセージにパスワードと同じ文字列があれば `****` に置き換わる）
+    *   `PASSWORD_SOURCE`：パスワードを読んだ場所（`environment`、または `--env-file` のファイル）。結果と一緒に示す
     *   `RESULT=OK`（終了コード 0）：接続先（host:port/dbName）と `PRODUCT`（DB の製品名とバージョン）を表示する
     *   `RESULT=FAIL`（終了コード 1）：`CATEGORY` をもとに原因と次アクションを示し、`EXCEPTION` / `SQLSTATE` / `ERROR_CODE` / `MESSAGE` / `CAUSE` を根拠として短く引用する
 
@@ -266,7 +276,10 @@ DB の種類ごとの Maven 座標・既定ポート・JAR 名のパターン・
         | `DRIVER` | URL に合うドライバーが無い | ドライバー JAR を取得できているか、URL の書式 |
         | `UNKNOWN` | 上記のどれにも当てはまらない | `MESSAGE` と `CAUSE` を読んで判断する |
 
-    *   `RESULT=ERROR`（終了コード 2）：環境変数が未設定（`CATEGORY=PASSWORD_ENV_NOT_SET`）。手順 2 に戻る
+    *   `RESULT=ERROR`（終了コード 2）：パスワードを読めなかった。手順 2 に戻る
+        *   `CATEGORY=PASSWORD_ENV_NOT_SET`：環境変数が未設定で、`--env-file` のファイルにも定義が無い
+        *   `CATEGORY=ENV_FILE_NOT_READABLE`：`--env-file` のファイルを読めない（パスの誤りなど）
+    *   `NOTE=... is quoted ...`：server.env の値が引用符で囲まれていて、引用符ごと値として使った。`AUTH` で失敗した場合は、引用符が原因の可能性をユーザーに伝える
     *   出力が `Usage:` で始まる場合（終了コード 2）：引数の数や形式が間違っている
     *   DB ごとの注意（SQL Server の `encrypt=true` など）は `reference/databases.md` の「DB ごとの注意」を見る
 

@@ -45,7 +45,7 @@ dev mode（`liberty:dev` / `libertyDev`）が実行中なら、生成の前に�
 
 # 重要方針：集約 feature / platform は最小化対象
 
-以下は原則として「最小化候補」とはみなさず、分解対象とします。
+以下は原則として「そのまま残す候補」とはみなさず、個別の feature への分解対象とします。
 
 - `jakartaee-*`
 - `javaee-*`
@@ -94,7 +94,14 @@ feature 削除は必ず段階的に行う。
 ## --force
 前回の生成結果（出力ディレクトリの `generated-features.required.xml`）があっても使わず、必ず生成し直す。
 
-指定が無い場合、前回の生成結果が `src/` 配下・`pom.xml`・`build.gradle(.kts)`・server.xml などの構成ファイルのどれよりも新しければ、生成せずにそれを使う（使ったことと、その日時を出力に書く）。
+指定が無い場合、前回の生成結果が `src/` 配下・`pom.xml`・`build.gradle(.kts)`・server.xml などの構成ファイルのどれよりも新しければ、生成せずにそれを使う（使ったことと、その日時を出力に書く）。スクリプトは一時的に変更したファイルの更新日時も元に戻すので、更新日時で判断してよい。
+
+確かめ方の例（何も表示されなければ再利用できる。存在しないパスのエラーは無視してよい）：
+
+```bash
+find src pom.xml build.gradle build.gradle.kts <server.xml のディレクトリ> -type f \
+    -newer target/liberty-feature-min/generated-features.required.xml 2>/dev/null | head -1
+```
 
 ## --no-generate
 生成せず静的分析のみ
@@ -139,9 +146,9 @@ feature 削除は必ず段階的に行う。
 
 ## multi-module 対応
 
-- modules / settings.gradle 解析
-- plugin 適用 module 特定
-- server.xml と module 対応推定
+- Maven は `pom.xml` の `<modules>`、Gradle は `settings.gradle(.kts)` の `include` から module を列挙する
+- Liberty プラグインを適用している module（通常は war / ear を作る module）を特定し、その module の server.xml を対象にする
+- 該当する module が複数あって決められない場合だけ、1 回質問する
 
 ---
 
@@ -164,6 +171,11 @@ feature 削除は必ず段階的に行う。
 
 - `reference/server-xml-discovery.md` の手順で決める（`target/` や `build/` 配下のコピーは対象にしない）
 - 複数見つかったら、1 回だけ選んでもらう
+- Liberty プラグインの設定で構成の場所が変えられていないかを確認する（generate-features はプラグインの設定の場所を読み、そこに generated-features.xml を書く）
+  - Maven：liberty-maven-plugin の `<configDirectory>` / `<serverXmlFile>`
+  - Gradle：`liberty { server { configDirectory = ... ; serverXmlFile = ... } }`
+  - `serverXmlFile` があればそのファイル、無ければ `configDirectory` の中の `server.xml` を対象にする
+  - スクリプトは「server.xml のあるディレクトリ」を構成ディレクトリとして扱う。対象の server.xml が `configDirectory`（既定は `src/main/liberty/config`）の直下に無い場合は、generated-features.xml の場所がずれるので、生成せず静的分析のみにして、その理由を報告する
 
 ---
 
@@ -206,10 +218,14 @@ liberty-maven-plugin 3.12.2 で確認した挙動（Gradle プラグインは未
    2. `~/.bob/skills/liberty-feature-min/scripts/GenerateRequiredFeatures.java`
    - どちらにも無い場合、またはコマンドを実行できないモード（Ask モードなど）の場合は、生成せず静的分析のみ（`--no-generate` と同じ）にして、その理由を報告する
 2. 生成コマンドを決める（`clean` は含めない。バックアップを置く出力ディレクトリが消えるため、スクリプトが拒否する）
+   - スクリプトに渡すコマンドは 1 つだけにする。`sh -c "a && b"` のように複数のコマンドをまとめない（止めたときにビルドの本体が残り、元に戻した後にファイルを書くことがある。スクリプトは Java 9 以上なら子のプロセスまで止めるが、Java 8 では止められない）
    - Maven：`./mvnw compile liberty:generate-features`
    - Gradle：`./gradlew classes generateFeatures`
    - Gradle の multi-module：`./gradlew :module:classes :module:generateFeatures`
-   - Maven の multi-module：Liberty プラグインを適用しているモジュールで生成する。1 回のコマンドで済まない場合は `sh -c "..."` でまとめて渡す（例：`sh -c "./mvnw -pl <module> -am compile && ./mvnw -pl <module> liberty:generate-features"`）。構成によって必要な手順が違うので、失敗したらプロジェクトの README などを確認する
+   - Maven の multi-module：Liberty プラグインを適用しているモジュールで生成する。コンパイルは一時的な変更が要らないので、先にスクリプトの外で実行し、スクリプトには生成だけを渡す
+     1. スクリプトの外で：`./mvnw -pl <module> -am compile`
+     2. スクリプトに渡す：`./mvnw -pl <module> liberty:generate-features`
+     - 2 で依存するモジュールが見つからない場合は、1 を `./mvnw -pl <module> -am install -DskipTests` にする。構成によって必要な手順が違うので、失敗したらプロジェクトの README などを確認する
 3. 実行する（`<スクリプト>` は手順 1 で見つけたパス。出力ディレクトリは Maven なら `target/liberty-feature-min`、Gradle なら `build/liberty-feature-min`）
    - Java 11 以上：
      ```bash
@@ -232,8 +248,12 @@ liberty-maven-plugin 3.12.2 で確認した挙動（Gradle プラグインは未
      - `OK`：生成して元に戻した
      - `BUILD_FAILED`：生成に失敗した（元には戻した）。`BUILD_LOG_TAIL` と `build.log` を見て「生成失敗時」に従う
      - `INTERRUPTED`：途中で止められた（元には戻した）
-     - `ERROR`：実行前に止めた（何も変更していない）。`CATEGORY` を見る。`PREVIOUS_RUN_NOT_RESTORED` の場合は、前回の実行が強制終了されて元に戻っていないので、表示された `RESTORE_COMMAND`（`--restore`）を実行してからやり直す
+     - `ERROR`：生成しなかった（何も変更していない、または変更を元に戻した）。`CATEGORY` を見る
+       - `PREVIOUS_RUN_NOT_RESTORED`：前回の実行が強制終了されて元に戻っていない。表示された `RESTORE_COMMAND` をそのまま実行してからやり直す
+       - `IO_ERROR`：ファイルを読み書きできなかった（読み取り専用のファイルなど）。`MESSAGE` をユーザーに伝える
      - `RESTORE_FAILED`：**元に戻せなかった。** 分析を続けず、`RESTORE_FAILED=` のファイルと `RESTORE_COMMAND` を必ずユーザーに伝える
+   - `RESTORE_COMMAND` には、実行したスクリプトの場所（コンパイルして実行した場合はクラスの場所）が入っているので、そのまま実行できる
+   - `RESULT` の行が無い場合（スクリプトが強制終了されたなど）は、元に戻っていない可能性がある。`RESTORE_COMMAND` があればそれを、無ければ手順 3 と同じ `java` コマンドで `--restore <出力ディレクトリ>` を実行する（戻すものが無ければ `RESULT=NOTHING_TO_RESTORE`）
 5. git 管理下なら、`git status` で src 側に変更が残っていないことを確認し、結果を出力に書く
 
 ※ generated-features.xml そのものを更新したいとユーザーが明示した場合だけ、通常の生成コマンド（手順 2）をそのまま実行してよい。その場合は、個別に書かれている feature は出力されないこと、versionless の構成では失敗することを先に伝える。
@@ -340,11 +360,11 @@ feature 名とバージョンは、**必ず `reference/feature-matrix.md` の対
 
 ## versionless
 
-区別：
+現在の指定を、次の 3 つに分けて示す（分類表の「由来」にも書く）：
 
-* platform
-* versionless
-* version指定
+* platform：`<platform>` と、server.env の `PREFERRED_PLATFORM_VERSIONS`
+* versionless feature：バージョン無しの feature（例：`restfulWS`）。どの platform で解決されるかも示す
+* バージョン付きの feature（例：`restfulWS-3.1`）
 
 注意：
 
@@ -362,11 +382,13 @@ feature 名とバージョンは、**必ず `reference/feature-matrix.md` の対
 
 ## 段階削減
 
-1. 重複削除
-2. 集約分解
-3. 不要削除
-4. 統合テスト
-5. 微調整
+一度に全部を変えず、次の順に 1 段階ずつ進める案にする。各段階の後に起動し、`CWWKF0012I` と feature 解決エラーの有無、主要なテストを確かめてから次に進む。
+
+1. 重複削除：集約 feature に含まれる個別の指定を消す（案A）
+2. 集約分解：集約 feature / platform を、必要な feature の一覧と設定要素で必要な feature に置き換える（案B）
+3. 不要削除：🗑 削除候補を消す（🟡 要確認のものは、根拠を確かめるまで残す）
+4. 統合テスト：「検証チェック」の項目を本番相当の環境で確かめる
+5. 微調整：起動ログやテストで不足が見つかった feature を足す。足した理由を記録する
 
 ---
 

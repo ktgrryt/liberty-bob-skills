@@ -20,8 +20,8 @@ tests/run.sh --with-maven  # 上に加えて、sample-app で本物の liberty:g
 | --- | --- |
 | `tools/validate-skills.py` | frontmatter（`name` と `description` だけか、`name` がフォルダ名と同じか）、`reference/` と `scripts/` の参照、コードブロックの閉じ |
 | `tools/sync-shared.sh --check` | `skills/*/reference/` のコピーが `shared/` とずれていないか |
-| `tests/scripts/test-jdbc-ping.sh` | `JdbcPing.java`：成功、失敗の分類（AUTH / DRIVER / NETWORK / DNS）、パスワードを表示しないこと、Java 8 向けのコンパイル。H2 と PostgreSQL のドライバーを Maven で取得する（DB サーバーは不要） |
-| `tests/scripts/test-generate-required-features.sh` | `GenerateRequiredFeatures.java`：元に戻すこと（ビルド失敗、SIGTERM、SIGKILL の後の `--restore`）、実行前に止めるケース、Java 8 向けのコンパイル。`--with-maven` で sample-app を使った本物の生成 |
+| `tests/scripts/test-jdbc-ping.sh` | `JdbcPing.java`：成功、失敗の分類（AUTH / DRIVER / NETWORK / DNS）、`--env-file`（`$` や `&` を含む値をそのまま読む）、パスワードを表示しないこと、Java 8 向けのコンパイル。H2 と PostgreSQL のドライバーを Maven で取得する（DB サーバーは不要） |
+| `tests/scripts/test-generate-required-features.sh` | `GenerateRequiredFeatures.java`：元に戻すこと（内容・権限・更新日時。ビルド失敗、SIGTERM、`sh -c` の子プロセス、SIGKILL の後に表示されたコマンドで `--restore`、読み取り専用のファイル）、実行前に止めるケース、Java 8 向けのコンパイル。`--with-maven` で sample-app を使った本物の生成 |
 
 ## 手動テスト（Bob で確かめる）
 
