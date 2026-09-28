@@ -1,0 +1,7 @@
+# shared/ の共通ファイルを、どの Skill の reference/ にコピーするか。
+# 書式: <共通ファイル> <コピー先の Skill> [<コピー先の Skill> ...]
+# このファイルを変えたら tools/sync-shared.sh を実行する。
+
+server-xml-discovery.md   liberty-datasource-create liberty-doctor liberty-endpoint-map liberty-env-vars-audit liberty-feature-add liberty-feature-min
+feature-matrix.md         liberty-feature-add liberty-feature-min
+liberty-config-sources.md liberty-doctor liberty-env-vars-audit

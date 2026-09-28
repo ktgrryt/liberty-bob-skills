@@ -1,0 +1,28 @@
+<server description="sample-app">
+
+    <featureManager>
+        <feature>jakartaee-10.0</feature>
+        <feature>mpHealth-4.0</feature>
+        <feature>jpa-3.1</feature>
+    </featureManager>
+
+    <variable name="http.port" defaultValue="9080"/>
+    <variable name="greeting.text" value="${app.greting}"/>
+
+    <httpEndpoint id="defaultHttpEndpoint" httpPort="${http.port}" httpsPort="9443"/>
+
+    <webApplication location="sample-app.war" contextRoot="/shop"/>
+
+    <library id="jdbcLib">
+        <fileset dir="${server.config.dir}/jdbc" includes="*.jar"/>
+    </library>
+
+    <dataSource id="ordersDs" jndiName="jdbc/orders">
+        <jdbcDriver libraryRef="jdbcLib"/>
+        <properties.postgresql serverName="${db.host:localhost}" portNumber="5432" databaseName="orders"
+                               user="${db.user}" password="dummy-password-for-tests"/>
+    </dataSource>
+
+    <logging traceFileName="${server.output.dir}/logs/trace.log"/>
+
+</server>

@@ -1,37 +1,42 @@
 ---
 name: liberty-feature-add
 description: >-
-  指定した“やりたいこと”(例:JPA / REST Client)から、プロジェクトの Java EE / Jakarta EE
-  世代を自動判定し、Liberty の適切な feature と追加作業一式（server.xml + 依存関係 + 最小サンプル +
-  検証手順）を提示・適用する
-metadata:
-  user-invocable: true
-  disable-model-invocation: false
-  argument-hint: <機能名>
+  Liberty（WebSphere Liberty / Open Liberty）プロジェクトに、やりたいこと（例：JPA、REST、REST Client、CDI、
+  Bean Validation、JSON-B、Security、JMS）に必要な feature と依存関係を追加する。
+  「JPA を使えるようにしたい」「REST Client を追加したい」「この機能に必要な feature は？」というときに使う。
+  Java EE 7 / 8、Jakarta EE 9.1 / 10 / 11 のどれかを判定して feature のバージョンを選び、
+  server.xml と pom.xml / build.gradle の差分を示してから適用する。
 ---
 
 あなたは WebSphere Liberty / Open Liberty のアーキテクト兼実装支援エンジニアです。  
 目的は **「動作を壊さず、最小変更で、必要な Liberty feature と周辺設定を揃える」** ことです。
 
-本コマンド `/liberty-feature-add <機能名>` は、ユーザー入力を “目的” とみなし（例: `JPA`, `REST Client`, `JAX-RS`, `CDI`）、次を **自動で実行** します：
+このスキルは、ユーザーが指定した機能名を “目的” とみなし（例: `JPA`, `REST Client`, `JAX-RS`, `CDI`）、次を **自動で実行** します：
 
 1.  **ビルドツール判定（質問しない）**
-2.  **Java EE / Jakarta EE 世代判定（質問しない）**
-3.  世代に合わせた **Liberty feature 候補を提案（最小）**
+2.  **EE バージョン判定（Java EE 7 / 8、Jakarta EE 9.1 / 10 / 11。質問しない）**
+3.  EE バージョンに合わせた **Liberty feature 候補を提案（最小）**
 4.  `server.xml` への **feature 追加案（差分）**
 5.  `pom.xml` / `build.gradle(.kts)` への **依存関係追加案（差分）**（原則 `provided`/`compileOnly`）
 6.  必要なら **最小サンプル（任意）** と **検証チェックリスト** を提示
-7.  「適用」まで行える環境なら **ファイル編集まで実施**（できない場合は diff を出力）
+7.  「適用」まで行える環境なら **差分を示したうえでファイル編集まで実施**（できない場合は diff を出力）
+
+***
+
+## 参照ファイル
+
+このスキルのフォルダにある次のファイルを、手順の中で指示されたときに読む。見つからない場合は `.bob/skills/liberty-feature-add/`、`~/.bob/skills/liberty-feature-add/` の順に探す。
+
+*   `reference/feature-matrix.md`：EE / MicroProfile のバージョンと feature 名の対応、集約 feature に含まれるもの、versionless の書き方（共通）
+*   `reference/server-xml-discovery.md`：server.xml の決め方（共通）
 
 ***
 
 ## 入力仕様（最小）
 
-### コマンド
+ユーザーの依頼文から、追加したい機能名を読み取る。
 
-`/liberty-feature-add <機能名>`
-
-### `<機能名>` の想定入力（例）
+### 機能名の想定入力（例）
 
 *   `JPA`
 *   `REST Client`
@@ -58,110 +63,112 @@ metadata:
 *   `pom.xml` があれば **Maven**
 *   `build.gradle` / `build.gradle.kts` があれば **Gradle**
 *   両方ある場合：
-    *   まず `src/main/liberty/config/server.xml` 等の存在と、既存の EE 世代判定が十分できるかを見る
+    *   まず `src/main/liberty/config/server.xml` 等の存在と、既存の EE バージョン判定が十分できるかを見る
     *   判定が十分できるなら質問せず進める
     *   どうしても「依存追記先」が 1 つに絞れない場合のみ、**1 回だけ**質問：
         *   「依存を追加するのは Maven(pom.xml) と Gradle(build.gradle) どちら？」
 
 ***
 
-### 2) Java EE / Jakarta EE 世代の自動判定（質問しない）
+### 2) EE バージョンの自動判定（質問しない）
 
-以下を **強い順** に見て、世代（Java EE 7/8 なのか Jakarta EE 9/10+ なのか）と、その根拠を出力する。
+javax か jakarta かだけでなく、**EE のメジャーバージョン（Java EE 7 / 8、Jakarta EE 9.1 / 10 / 11）まで** 判定する。  
+EE 9.1 と EE 10 の feature を混ぜると依存解決で衝突するため、「Jakarta EE 系」とまとめて扱わない。  
+以下を **強い順** に見て、判定結果と根拠を出力する。
 
 #### 2-A) 依存関係（最優先）
 
 *   Maven: `pom.xml` の dependency / dependencyManagement / BOM を探索
-    *   `jakarta.platform:jakarta.jakartaee-api` の有無と version
-    *   `javax:javaee-api` / `javax:javaee-web-api` の有無と version
-    *   `jakarta.*` / `javax.*` API 個別依存（`jakarta.persistence-api` 等）
-*   Gradle: `dependencies {}` の `jakarta.*` / `javax.*` と BOM 設定の有無
+    *   `jakarta.platform:jakarta.jakartaee-api`（または `jakarta.jakartaee-web-api` / `jakarta.jakartaee-core-api`）の version：`9.1.x` → EE 9.1、`10.x` → EE 10、`11.x` → EE 11
+    *   `javax:javaee-api` / `javax:javaee-web-api` の version：`7.0` → Java EE 7、`8.0` → Java EE 8
+    *   `org.eclipse.microprofile:microprofile` の version（MicroProfile のバージョン）
+    *   `jakarta.*` / `javax.*` API 個別依存（`jakarta.persistence-api` 等）の version
+*   Gradle: `dependencies {}` の `jakarta.*` / `javax.*` と BOM 設定の有無・version
 
-#### 2-B) ソースコードの import（次優先）
+#### 2-B) 既存の server.xml の feature（次優先）
+
+既存 `server.xml` の feature のバージョンから判定する（`reference/feature-matrix.md` の対応表を参照）。例：
+
+*   `jaxrs-2.1` / `jpa-2.2` / `cdi-2.0` → **Java EE 8**
+*   `restfulWS-3.0` / `persistence-3.0` / `cdi-3.0` → **Jakarta EE 9.1**
+*   `restfulWS-3.1` / `persistence-3.1` / `cdi-4.0` → **Jakarta EE 10**
+*   `restfulWS-4.0` / `persistence-3.2` / `cdi-4.1` → **Jakarta EE 11**
+*   `jakartaee-10.0` / `webProfile-10.0` / `<platform>jakartaee-10.0</platform>` などの集約 feature や platform → その番号
+
+#### 2-C) ソースコードの import（補助）
 
 *   `src/**` を走査して import をサンプリング
     *   `import jakarta.*` が優勢 → Jakarta EE 系
     *   `import javax.*` が優勢 → Java EE 系
-
-#### 2-C) server.xml の既存 feature（補助）
-
-既存 `server.xml` の feature から推定：
-
-*   `servlet-3.1` / `jaxrs-2.0/2.1` / `cdi-1.x/2.0` / `jpa-2.0/2.1/2.2` → **Java EE 7/8 系**
-*   `servlet-5.0/6.0` / `jaxrs-3.0/3.1` / `cdi-3.0/4.0` / `jpa-3.0/3.1` → **Jakarta EE 9/10 系**
+*   import だけではメジャーバージョンまでは決められないので、2-A / 2-B の補助に使う
 
 #### 2-D) 設定ファイル（補助）
 
-*   `web.xml` / `beans.xml` / `persistence.xml` の namespace/version からも補助推定
+*   `web.xml`（`version="4.0"` → EE 8、`"5.0"` → EE 9.1、`"6.0"` → EE 10、`"6.1"` → EE 11）
+*   `beans.xml` / `persistence.xml` の namespace / version
 
 > **出力には必ず「判定結果」と「根拠（見つけた行やファイル）」を添える。**  
-> 根拠が割れて世代を断定できない場合のみ、最後に **1 回だけ**質問する：  
-> 「このプロジェクトは `javax`(Java EE) と `jakarta`(Jakarta EE) どちらを前提にしますか？」
+> 根拠が割れて EE バージョンを断定できない場合のみ、最後に **1 回だけ**質問する：  
+> 「このプロジェクトは Java EE 8 / Jakarta EE 9.1 / 10 / 11 のどれを前提にしますか？」
 
 ***
 
 ### 3) server.xml の決定（質問は最小）
 
-*   `src/main/liberty/config/server.xml` があればそれを採用
-*   なければ自動探索（優先順）：
-    1.  `src/main/liberty/config/server.xml`
-    2.  `config/server.xml`
-    3.  `wlp/usr/servers/*/server.xml`
-    4.  その他 `server.xml`
-*   複数見つかったら候補を列挙し、**対象を 1 回だけ質問**する。
+*   `reference/server-xml-discovery.md` の手順で決める
+*   **`target/` や `build/` 配下の server.xml は編集しない**（ビルド時のコピーで、編集しても次のビルドで消える）
+*   複数見つかったら、**対象を 1 回だけ質問**する
 
 ***
 
-### 4) 追加する Liberty feature の決定ロジック（“目的→世代→feature”）
+### 4) 追加する Liberty feature の決定ロジック（“目的→EE バージョン→feature”）
 
-ユーザーの `<機能名>` を “目的カテゴリ” に正規化し、世代に応じて Liberty feature を選ぶ。
+ユーザーの機能名を “目的カテゴリ” に正規化し、EE バージョンに応じて Liberty feature を選ぶ。
 
 #### 4-A) 正規化（例）
 
-*   `JPA`, `永続化`, `Hibernate 使いたい` → **JPA**
-*   `REST`, `JAX-RS`, `API`, `Resource` → **JAX-RS**
+*   `JPA`, `永続化`, `Hibernate 使いたい` → **Persistence（JPA）**
+*   `REST`, `JAX-RS`, `API`, `Resource` → **REST（JAX-RS）**
 *   `REST Client`, `MP REST Client`, `外部 API 呼び出し` → **REST Client**
+*   `Servlet` → **Servlet**
 *   `DI`, `CDI` → **CDI**
 *   `Validation`, `Bean Validation` → **Bean Validation**
 *   `JSONB`, `JSON-B` → **JSON-B**
 *   `JSONP`, `JSON-P` → **JSON-P**
+*   `Security`, `認証`, `認可`, `ログイン` → **Security**
+*   `JMS`, `Messaging`, `メッセージング`, `MQ` → **Messaging（JMS）**
 
-#### 4-B) feature マッピング（代表）
+#### 4-B) feature の選び方
 
 > ここは「候補を最小」にするのが方針。  
 > ただし Liberty の構成や既存 feature と衝突する場合は、**既存に合わせて最小追加**に寄せる。
 
-**JPA**
-
-*   Java EE 系（javax）: `jpa-2.2`（既存が 2.1 なら 2.1 を尊重）
-*   Jakarta EE 系（jakarta）: `jpa-3.0` または `jpa-3.1`（既存が 3.0 なら 3.0）
-
-**JAX-RS（REST API）**
-
-*   Java EE 系: `jaxrs-2.1`（既存が 2.0 なら 2.0 を尊重）
-*   Jakarta EE 系: `jaxrs-3.0` または `jaxrs-3.1`
+*   feature 名とバージョンは、**必ず `reference/feature-matrix.md` の対応表から選ぶ**（Jakarta EE 9 以降で名前が変わっていて、`jpa-3.x` や `jaxrs-3.x` は存在しない）
+*   表に無い組み合わせは推測で書かず、使っている Liberty のバージョンのドキュメントで確認してから提案する
+*   目的ごとの追加の判断は次のとおり
 
 **REST Client**
 
-*   基本は MicroProfile Rest Client 系を優先（目的が「外部 REST 呼び出し」なので）
-    *   既存に MicroProfile feature がある → それに合わせて `mpRestClient-*` を最小追加
-    *   MicroProfile が無い → 追加最小で済む版を 1 つ提案し、必要なら関連 feature（`mpConfig-*` 等）も最小追加
-*   もしユーザーが「JAX-RS Client で良い」意図なら、JAX-RS 追加で足りる場合もあるため、**差分の小さい方**を提示
+*   基本は MicroProfile Rest Client を優先（目的が「外部 REST 呼び出し」なので）
+    *   既存に MicroProfile の feature がある → その MicroProfile のバージョンに合わせて `mpRestClient-*` を最小追加
+    *   MicroProfile が無い → EE バージョンに合う MicroProfile から選ぶ
+        *   Jakarta EE 9.1 → MicroProfile 5.0 → `mpRestClient-3.0`
+        *   Jakarta EE 10 → MicroProfile 6.1 → `mpRestClient-3.0`、または MicroProfile 7.0 → `mpRestClient-4.0`
+        *   Jakarta EE 11 → MicroProfile 7.0 → `mpRestClient-4.0`
+*   ユーザーが「JAX-RS のクライアント API で良い」意図なら、クライアント専用の feature（Java EE 8：`jaxrsClient-2.1`、Jakarta EE：`restfulWSClient-3.0` / `3.1` / `4.0`）で足りる場合もあるため、**差分の小さい方**を提示
 
-**CDI**
+**Security**
 
-*   Java EE 系: `cdi-2.0`（既存が 1.x なら既存尊重）
-*   Jakarta EE 系: `cdi-3.0` / `cdi-4.0`（既存尊重）
+*   対応表の `appSecurity-*` を追加する
+*   ユーザーレジストリ（`<basicRegistry>` / `<ldapRegistry>` など）やロールの割り当ては、目的によって大きく変わるので **提案に留める**（自動追加しない）
+*   JWT で認証したい意図なら `mpJwt-*`（MicroProfile のバージョンに合わせる）を候補にする
 
-**Bean Validation**
+**Messaging（JMS）**
 
-*   Java EE 系: `beanValidation-2.0`
-*   Jakarta EE 系: `beanValidation-3.0` 以降（既存尊重）
-
-**JSON-B / JSON-P**
-
-*   Java EE 系: `jsonb-1.0`, `jsonp-1.1`（既存尊重）
-*   Jakarta EE 系: `jsonb-2.0/3.0`, `jsonp-2.0`（既存尊重）
+*   対応表の JMS API 用の feature（`jms-2.0` / `messaging-3.x`）を追加する
+*   接続先によって、別の feature が必要になる。これは **提案に留める**：
+    *   Liberty の組み込みメッセージングを使う：Jakarta EE は `messagingServer-3.0` / `messagingClient-3.0`、Java EE は `wasJmsServer-1.0` / `wasJmsClient-2.0`
+    *   IBM MQ など外部のプロバイダーを使う：リソースアダプターの設定（`connectors-*` / `jca-*`）
 
 > 既存 feature がある場合は“上げない”。
 > 原則：追加はするが、バージョンアップは提案に留める（互換影響があるため）。
@@ -172,9 +179,15 @@ metadata:
 
 *   `server.xml` の `<featureManager>` を解析し、
     *   すでに同等 feature がある → 追加しない（理由を明記）
-    *   近いが世代違い（例: `jpa-2.2` があるが jakarta 側へ寄せたい等）  
+    *   **集約 feature（`jakartaee-*` / `javaee-*` / `webProfile-*` / `microProfile-*`）に含まれている** → 追加しない（理由を明記）
+        *   何が含まれるかは `reference/feature-matrix.md` の「集約 feature に含まれるもの」で判断する（例：Messaging は `webProfile-*` に含まれない）
+        *   含まれているかどうか確信が無い場合は、起動ログの `CWWKF0012I`（インストールされた feature の一覧）で確認するよう案内する
+    *   近いがバージョン違い（例: `jpa-2.2` があるが jakarta 側へ寄せたい等）  
         → **自動置換はしない**。  
         「置換案（影響あり）」として別枠で提案する。
+*   **versionless 構成** の場合は、バージョン無しの名前で追加する
+    *   versionless 構成とみなす条件：`<platform>` がある、server.env に `PREFERRED_PLATFORM_VERSIONS` がある、または既存の feature がバージョン無しで書かれている
+    *   名前は `reference/feature-matrix.md` の「versionless feature と platform」に従い、platform に合わせる（例：Jakarta EE は `persistence`、Java EE は `jpa`）
 *   `<featureManager>` がない場合は最小で追加する
 *   出力は必ず **Before/After の diff**（または差分ブロック）を提示
 
@@ -189,17 +202,21 @@ metadata:
     *   既存の `jakarta.jakartaee-api` / `javaee-api` がある → 追加不要（理由を明記）
 *   個別 API が必要な場合（例：JPA だけ使いたい）：
     *   既存 BOM/方針に合わせて最小追加
+    *   バージョンは EE バージョンに合わせる（例：`jakarta.persistence:jakarta.persistence-api` は EE 9.1 → 3.0.x、EE 10 → 3.1.x、EE 11 → 3.2.x。Java EE 8 は `javax.persistence:javax.persistence-api` 2.2）
     *   Maven: `<scope>provided</scope>`
     *   Gradle: `compileOnly`（必要なら `testImplementation` は追加提案）
+*   MicroProfile を使う場合：
+    *   既存の `org.eclipse.microprofile:microprofile`（`type=pom`、`provided`）があれば追加不要
+    *   無ければ、個別 API（例：`org.eclipse.microprofile.rest.client:microprofile-rest-client-api`）を `provided` / `compileOnly` で最小追加
 
 > 注意：実装（例：Hibernate 本体）をアプリ同梱するかはプロジェクト方針次第なので、  
-> コマンドは “勝手に実装依存を入れない”。必要に応じて「選択肢」として提示する。
+> このスキルは “勝手に実装依存を入れない”。必要に応じて「選択肢」として提示する。
 
 ***
 
 ### 7) 任意：最小サンプル（要求が明示的な時だけ）
 
-ユーザーが `<機能名>` とともに「サンプルも欲しい」ニュアンスを出した場合のみ：
+ユーザーが機能名とともに「サンプルも欲しい」ニュアンスを出した場合のみ：
 
 *   JPA: `@Entity` + `persistence.xml` or `@PersistenceContext` 例
 *   REST Client: MP Rest Client の interface + 呼び出し例
@@ -209,19 +226,19 @@ metadata:
 
 ***
 
-## “実行”手順（このコマンドが行うこと）
+## “実行”手順（このスキルが行うこと）
 
 ### A) 情報収集（自動）
 
 1.  ビルドツール判定（pom/gradle）
 2.  `server.xml` 探索＆読み取り
-3.  依存定義（pom/gradle）と import サンプルから EE 世代判定
-4.  既存 feature 一覧抽出
+3.  依存定義（pom/gradle）・既存 feature・import から EE バージョン判定
+4.  既存 feature 一覧抽出（集約 feature・platform・versionless の有無を含む）
 
 ### B) 追加プラン作成（自動）
 
-1.  `<機能名>` を目的カテゴリに正規化
-2.  世代 + 既存 feature から追加すべき feature を **1 つ**に絞る
+1.  機能名を目的カテゴリに正規化
+2.  EE バージョン + 既存 feature から追加すべき feature を **1 つ**に絞る
     *   絞れない場合のみ 2〜3 候補提示 + 最小質問 1 回
 3.  server.xml 差分案
 4.  pom/gradle 差分案（必要な時だけ）
@@ -229,7 +246,8 @@ metadata:
 
 ### C) 適用（可能なら自動、無理なら diff）
 
-*   編集権限がある環境なら、server.xml と build ファイルを更新
+*   差分を提示したうえで、編集権限がある環境なら server.xml と build ファイルを更新
+*   編集するのは src 側のファイルだけ（`target/` / `build/` 配下は編集しない）
 *   できない場合は diff を出力し、貼り付け手順を最小で案内
 
 ***
@@ -239,13 +257,13 @@ metadata:
 1.  **判定結果サマリ**
 
 *   ビルドツール: Maven/Gradle
-*   EE 世代: Java EE 8 / Jakarta EE 9+ 等
-*   根拠: `pom.xml` の該当行、import 検出、server.xml feature など
+*   EE バージョン: Java EE 8 / Jakarta EE 9.1 / 10 / 11 等
+*   根拠: `pom.xml` の該当行、server.xml feature、import 検出など
 
 2.  **提案 feature（最小）**
 
-*   追加する feature: `xxx-y.y`
-*   既存との関係: 追加/不要/衝突注意（根拠付き）
+*   追加する feature: `xxx-y.y`（versionless 構成なら `xxx`）
+*   既存との関係: 追加/不要（集約 feature に含まれる等）/衝突注意（根拠付き）
 
 3.  **修正案（Before/After diff）**
 
@@ -254,11 +272,11 @@ metadata:
 
 4.  **影響・注意点（短く）**
 
-*   互換影響があり得る場合（世代違い置換など）はここに隔離して提示（自動変更しない）
+*   互換影響があり得る場合（バージョン違いの置換など）はここに隔離して提示（自動変更しない）
 
 5.  **検証チェックリスト**
 
-*   起動ログ（feature 解決、警告）
+*   起動ログ（`CWWKF0012I` で feature がインストールされたか、`CWWKF0001E` などの feature 解決エラーが無いか）
 *   代表ユースケースのスモーク
 *   外部依存（DB/HTTP）疎通
 
@@ -270,17 +288,18 @@ metadata:
 
 ## 例：期待される動作イメージ
 
-### `/liberty-feature-add JPA`
+### 「liberty-feature-add で JPA を追加して」
 
-*   EE 世代判定（javax/jakarta）
-*   `server.xml` に `jpa-2.2` or `jpa-3.x` を **最小追加**
-*   依存が無ければ `jakarta.persistence-api`（または `javax.persistence-api`）を `provided/compileOnly` で提案
-*   DB 接続（DataSource）が無ければ、**「必要なら」** server.xml の datasource 追加を “提案” する（自動追加しない）
+*   EE バージョン判定（例：`jakarta.jakartaee-api` 10.0.0 → Jakarta EE 10）
+*   集約 feature（`webProfile-10.0` など）に含まれていれば追加しない
+*   含まれていなければ `server.xml` に `persistence-3.1` を **最小追加**（Java EE 8 なら `jpa-2.2`、versionless 構成なら `persistence`）
+*   依存が無ければ `jakarta.persistence:jakarta.persistence-api`（Java EE 8 は `javax.persistence:javax.persistence-api`）を `provided/compileOnly` で提案
+*   DB 接続（DataSource）が無ければ、**「必要なら」** `liberty-datasource-create` スキルで追加できることを “提案” する（自動追加しない）
 
-### `/liberty-feature-add REST Client`
+### 「liberty-feature-add で REST Client を追加して」
 
-*   MP Rest Client を最小追加（既存 MP 構成があれば合わせる）
-*   もし既に JAX-RS が入っていて “Client だけ” で良いなら、差分が小さい案も併記  
+*   MP Rest Client を最小追加（既存の MicroProfile 構成があれば、そのバージョンに合わせる）
+*   もし既に REST（`restfulWS-*` / `jaxrs-*`）が入っていて “Client だけ” で良いなら、差分が小さい案も併記  
     → ただし **候補は 2 つまで**、質問は 1 回まで
 
 ***
@@ -289,5 +308,6 @@ metadata:
 
 *   **既存を尊重**（勝手に version を上げない）
 *   **追加は最小**（目的を満たす feature を 1 個に絞る）
-*   **断定しない**（世代が割れる時だけ質問）
+*   **EE バージョンを混ぜない**（javax / jakarta だけでなく、9.1 / 10 / 11 まで揃える）
+*   **断定しない**（EE バージョンが割れる時だけ質問）
 *   **差分で出す**（レビューしやすい）

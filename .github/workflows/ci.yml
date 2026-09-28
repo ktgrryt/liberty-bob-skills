@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    name: Skill の形式と shared/ の同期
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Skill の形式
+        run: python3 tools/validate-skills.py
+      - name: shared/ の同期
+        run: tools/sync-shared.sh --check
+
+  scripts:
+    name: スクリプトのテスト
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - name: JdbcPing
+        run: tests/scripts/test-jdbc-ping.sh
+      - name: GenerateRequiredFeatures（本物の generate-features を含む）
+        run: tests/scripts/test-generate-required-features.sh --with-maven
