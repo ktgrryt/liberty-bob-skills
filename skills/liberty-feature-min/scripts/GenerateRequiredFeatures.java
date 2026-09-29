@@ -33,7 +33,8 @@
  * コピーは <出力ディレクトリ>/work に作り、終了時に削除する（強制終了で残った場合は、次の実行で削除する）。
  *
  * 終了コード: 0 = 生成した、1 = 生成に失敗した（ビルドの失敗）、
- *            2 = 生成しなかった・結果を使えない（引数の誤り、ファイルを読み書きできない、コピーが使われなかった）
+ *            2 = 生成しなかった・結果を使えない（引数の誤り、ファイルを読み書きできない、コピーが使われなかった、
+ *                クラスを調べなかった）
  * Java 8 でもコンパイルできるように書いている。
  */
 import java.io.File;
@@ -79,6 +80,11 @@ public class GenerateRequiredFeatures {
     private static final byte[] PLACEHOLDER = ("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!-- " + MARK
             + " placeholder. generate-features rewrites this file when it uses this copy -->\n<server/>\n")
             .getBytes(StandardCharsets.UTF_8);
+    /**
+     * generate-features が調べるクラスを見つけられなかったときの警告の一部（Maven は "classes directory"、Gradle は "class files"）。
+     * この警告が出たときは、追加の feature が無いのではなく、調べていないので結果を使わない。
+     */
+    private static final String NO_CLASSES_WARNING = "Liberty features will not be generated";
     /** 作業用のディレクトリがこのプログラムで作ったものであることを示すファイル（無ければ削除しない） */
     private static final String WORK_MARKER = ".liberty-feature-min-work";
     private static final Pattern COMMENT = Pattern.compile("<!--.*?-->", Pattern.DOTALL);
@@ -327,7 +333,8 @@ public class GenerateRequiredFeatures {
             run.add("-DgenerateToSrc=true");
         }
         long started = System.currentTimeMillis();
-        int exit = runBuild(run, projectCopy ? copyTo : projectDir, out.resolve("build.log"), timeout);
+        Path log = out.resolve("build.log");
+        int exit = runBuild(run, projectCopy ? copyTo : projectDir, log, timeout);
         if (interrupted) {
             // RESULT は終了処理が出力する
             return;
@@ -335,6 +342,7 @@ public class GenerateRequiredFeatures {
 
         String ioError = null;
         boolean generatedInCopy = false;
+        boolean noClasses = false;
         try {
             Set<Path> originals = new HashSet<Path>(files.keySet());
             originals.add(generated);
@@ -349,7 +357,8 @@ public class GenerateRequiredFeatures {
                 printGeneratedFiles(projectCopy ? copyTo : projectDir, copyGenerated, started, originals);
                 byte[] result = Files.isRegularFile(copyGenerated) ? Files.readAllBytes(copyGenerated) : null;
                 generatedInCopy = result != null && !Arrays.equals(result, PLACEHOLDER);
-                if (generatedInCopy) {
+                noClasses = new String(Files.readAllBytes(log), StandardCharsets.UTF_8).contains(NO_CLASSES_WARNING);
+                if (generatedInCopy && !noClasses) {
                     Path saved = out.resolve("generated-features.required.xml");
                     Files.write(saved, result);
                     System.out.println("REQUIRED=" + saved);
@@ -371,6 +380,10 @@ public class GenerateRequiredFeatures {
         }
         if (exit != 0) {
             finish("BUILD_FAILED", null, null, 1);
+        }
+        if (noClasses) {
+            error("NO_CLASSES_SCANNED", "generate-features found no class files to scan (see " + log
+                    + "). The Gradle plugin scans only the classes of the project that applies the Liberty plugin");
         }
         if (!generatedInCopy) {
             error("NOT_GENERATED_IN_COPY", "generate-features did not rewrite " + copyGenerated

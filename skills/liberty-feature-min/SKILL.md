@@ -232,6 +232,7 @@ liberty-maven-plugin 3.12.2 で確認した挙動（Gradle プラグインは未
      - `liberty:generate-features` と書くと、親の pom.xml が Liberty プラグインを宣言していない場合に失敗する（`No plugin found for prefix 'liberty'`）。バージョンを省くと、プロジェクトの指定ではなく最新版が使われる
      - generate-features は最も下流のモジュール（`<module>`）でだけ実行され、依存するモジュールのクラスも調べる
    - Gradle の multi-module：`./gradlew :module:classes :module:generateFeatures`
+     - Gradle の generateFeatures は、`:module`（Liberty プラグインを適用したプロジェクト）自身のクラスだけを調べる。Maven と違い、依存するプロジェクトのクラスは調べない。ear のようにクラスを持たないプロジェクトに Liberty プラグインを適用している場合は生成できない（スクリプトは `NO_CLASSES_SCANNED` を返す）
 3. 実行する（`<スクリプト>` は手順 1 で見つけたパス。出力ディレクトリは Maven なら `target/liberty-feature-min`、Gradle なら `build/liberty-feature-min`）
    - Java 11 以上：
      ```bash
@@ -262,6 +263,7 @@ liberty-maven-plugin 3.12.2 で確認した挙動（Gradle プラグインは未
      - `INTERRUPTED`：途中で止められた
      - `ERROR`：生成しなかった、または結果を使えない。`CATEGORY` を見る
        - `NOT_GENERATED_IN_COPY`：ビルドは成功したが、generate-features がコピーを使わなかった（プラグインの設定で generate-features を飛ばしている、ビルドの設定で構成の場所を絶対パスにしている、など）。結果は使わず、`GENERATED_FILE`・`CHANGED_ORIGINAL`・`build.log` から分かる原因を報告し、静的分析のみにする
+       - `NO_CLASSES_SCANNED`：generate-features が調べるクラスを見つけられなかった（「追加の feature が無い」ではない）。コンパイルされていない、または Gradle で Liberty プラグインを適用したプロジェクトにクラスが無い（ear など）。結果は使わず、静的分析のみにして、その理由を報告する
        - `NOT_BUILD_ROOT`：ビルドのルートで実行していない。`MESSAGE` のディレクトリに移ってやり直す
        - `BAD_COMMAND`：コマンドにプロジェクトの絶対パスがある。相対パスに直してやり直す
        - `SERVER_XML_OUTSIDE_PROJECT`：プロジェクトをコピーする場合に、server.xml がプロジェクトの外にある。静的分析のみにして、その理由を報告する
@@ -288,6 +290,7 @@ liberty-maven-plugin 3.12.2 で確認した挙動（Gradle プラグインは未
 * multi-module 問題
 * コピーの中のビルドの問題（`PROJECT_COPY` のとき。`.git` が無いと動かないプラグイン、プロジェクトの外を参照するビルド（Gradle の `includeBuild("../...")` など））
 * バージョン判定の失敗（feature の指定をすべて外したため、pom.xml に Jakarta EE / MicroProfile の API 依存が無いと、バージョンを判定できない）
+* 対応していない MicroProfile のバージョン（`The MicroProfile version number ... is not supported for feature generation`）。生成に使う binary-app-scanner 25.0.0.2.1 が対応しているのは MicroProfile 6.0 までで、依存に `org.eclipse.microprofile:microprofile` の 6.1 や 7.x を書いていると失敗する。ビルドファイルは変えず、静的分析のみにして、その理由を報告する
 
 → 最小修正案提示。生成できなかった場合は、静的分析の結果だけで案を作り、信頼度を下げる
 
