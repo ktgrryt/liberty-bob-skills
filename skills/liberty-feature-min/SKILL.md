@@ -6,7 +6,7 @@ description: >-
   「使っていない feature を知りたい」「generated-features.xml と server.xml の差分を見たい」
   「feature の依存解決エラー（CWWKF*）が出る」ときに使う。
   liberty:generate-features（Maven）/ generateFeatures（Gradle）で、アプリが使う API から見た必要な feature の一覧を作って分析する。
-  ビルドを実行するが、生成のために一時的に変更したファイルは終了時に元に戻す。platform / versionless feature にも対応する。
+  ビルドを実行するが、生成は構成ファイルのコピーで行い、元のファイルは変更しない。platform / versionless feature にも対応する。
 ---
 
 あなたは WebSphere Liberty / Open Liberty のアーキテクト兼レビュアーです。
@@ -24,11 +24,12 @@ description: >-
 生成を行う場合（`--no-generate` / `--dry-run` 以外）は、実行前に次を短く伝える：
 
 - ビルド（`compile` + `liberty:generate-features` など）を実行する
-- 生成のあいだ、server.xml・include 先・configDropins の `<feature>` と `<platform>` を **一時的に** コメントアウトし、既存の generated-features.xml も一時的に退避する
-- 終了時（失敗した場合も含む）に、これらはすべて元に戻す。**最終的にソースツリーは変更しない**
+- 生成は構成ファイルの **コピー** で行う（コピーの `<feature>` と `<platform>` をすべてコメントアウトして生成する）。**元の server.xml・include 先・configDropins・generated-features.xml は変更しない**
+  - Maven：構成ディレクトリだけをコピーする。ビルドは元のプロジェクトで行うので、`target/` はふだんのビルドと同じように更新される
+  - Gradle、または pom.xml で構成の場所を指定している Maven：プロジェクトをまるごとコピーし、コピーの中でビルドする（コピーとフルビルドの分だけ時間とディスクを使う。コピーは終了時に削除する）
 - server.xml の最小化そのもの（feature の削除）は **提案のみ** で、編集しない
 
-dev mode（`liberty:dev` / `libertyDev`）が実行中なら、生成の前に止めてもらう（一時的な変更を dev mode が検知し、サーバが再起動するため）。
+dev mode（`liberty:dev` / `libertyDev`）が実行中なら、生成の前に止めてもらう（Maven では元のプロジェクトでビルドするので、dev mode のビルドと `target/` を取り合うため）。
 
 ---
 
@@ -94,7 +95,7 @@ feature 削除は必ず段階的に行う。
 ## --force
 前回の生成結果（出力ディレクトリの `generated-features.required.xml`）があっても使わず、必ず生成し直す。
 
-指定が無い場合、前回の生成結果が `src/` 配下・`pom.xml`・`build.gradle(.kts)`・server.xml などの構成ファイルのどれよりも新しければ、生成せずにそれを使う（使ったことと、その日時を出力に書く）。スクリプトは一時的に変更したファイルの更新日時も元に戻すので、更新日時で判断してよい。
+指定が無い場合、前回の生成結果が `src/` 配下・`pom.xml`・`build.gradle(.kts)`・server.xml などの構成ファイルのどれよりも新しければ、生成せずにそれを使う（使ったことと、その日時を出力に書く）。スクリプトは元のファイルを変更しないので、更新日時で判断してよい。
 
 確かめ方の例（何も表示されなければ再利用できる。存在しないパスのエラーは無視してよい）：
 
@@ -198,34 +199,39 @@ liberty-maven-plugin 3.12.2 で確認した挙動（Gradle プラグインは未
 - **個別に書かれている feature は生成結果に含まれない。** 例：server.xml に `restfulWS-3.1` があると、アプリが REST を使っていても generated-features.xml には出てこない。そのため、書かれている個別の feature が本当に使われているのかを区別できない
 - **集約 feature は生成結果に影響しない。** `jakartaee-10.0` や `webProfile-10.0` が書かれていても、アプリが使う個別の feature（例：`restfulWS-3.1`、`cdi-4.0`、`jsonb-3.0`）はそのまま生成される
 - **versionless の feature（`<platform>` + バージョン無しの feature）が書かれていると、生成が失敗する**（`CWMIG12156E`）
-- 追加で必要な feature が見つからなければ、既存の generated-features.xml は **更新されずに残る**（古い内容の可能性がある）
+- 追加で必要な feature が見つからないと、既存の generated-features.xml は feature の無い内容（`No additional features generated` のコメントだけ）に書き直される。無ければ作られない
+- 生成すると、server.xml にも generated-features.xml についてのコメントを書き足す
 - Jakarta EE / MicroProfile / Java EE のバージョンは、`pom.xml` の依存（`jakarta.platform:jakarta.jakartaee-api`、`org.eclipse.microprofile:microprofile`、`javax:javaee-api`）から判定される
 - 検出できるのは、**アプリのクラスが使う API** に対応する feature だけ。server.xml の設定要素だけで必要になる feature（「安全性に関する注意」を参照）は出てこない
 - `${...}` 変数を使った include 先の feature は考慮されない
 - 生成には、ランタイム依存として IBM WebSphere Application Server Migration Toolkit for Application Binaries（別ライセンス）が使われる
 - dev mode では既定で無効（`-DgenerateFeatures=true` で有効になる）
 
-→ そのため、このスキルでは **書かれている `<feature>` と `<platform>` をすべて一時的に外し、既存の generated-features.xml も退避してから生成する。** こうすると、現在の指定に左右されない「アプリが使う API から見た必要な feature の一覧」が得られる。この作業は、元に戻す処理を確実に行うため、必ずスクリプトで行う。
+→ そのため、このスキルでは **構成ファイルのコピーを作り、コピーの `<feature>` と `<platform>` をすべて外してから、コピーを対象に生成する。** こうすると、現在の指定に左右されない「アプリが使う API から見た必要な feature の一覧」が得られる。元のファイルは変更しない（プラグインが書き足すコメントや generated-features.xml も、コピーに書かれる）。コピーの作成と、プラグインが本当にコピーを使ったかの確認のため、必ずスクリプトで行う。
 
 ---
 
 ## 生成の手順（スクリプトを使う）
 
-生成には、このスキルのフォルダにある `scripts/GenerateRequiredFeatures.java` を使う。**同じ作業を手作業（ファイルを直接書き換えてビルド）で行わない**（元に戻す処理を確実にするため）。
+生成には、このスキルのフォルダにある `scripts/GenerateRequiredFeatures.java` を使う。**同じ作業を手作業（ファイルを直接書き換えてビルド）で行わない**（元のファイルを変更しないため。スクリプトは、プラグインが本当にコピーを使ったかも確かめる）。
 
 1. スクリプトの場所を確認する（プロジェクトのスキルがグローバルより優先されるので、この順に探す）
    1. `.bob/skills/liberty-feature-min/scripts/GenerateRequiredFeatures.java`（プロジェクトルートから）
    2. `~/.bob/skills/liberty-feature-min/scripts/GenerateRequiredFeatures.java`
    - どちらにも無い場合、またはコマンドを実行できないモード（Ask モードなど）の場合は、生成せず静的分析のみ（`--no-generate` と同じ）にして、その理由を報告する
-2. 生成コマンドを決める（`clean` は含めない。バックアップを置く出力ディレクトリが消えるため、スクリプトが拒否する）
-   - スクリプトに渡すコマンドは 1 つだけにする。`sh -c "a && b"` のように複数のコマンドをまとめない（止めたときにビルドの本体が残り、元に戻した後にファイルを書くことがある。スクリプトは Java 9 以上なら子のプロセスまで止めるが、Java 8 では止められない）
+2. 生成コマンドを決める
+   - スクリプトは **ビルドのルート**（Maven は親の pom.xml、Gradle は settings.gradle(.kts) のあるディレクトリ）で実行する。プロジェクトをコピーするときは、このディレクトリをコピーする
+   - `clean` は含めない（コピーを置く出力ディレクトリが消えるため、スクリプトが拒否する）
+   - スクリプトに渡すコマンドは 1 つだけにする。`sh -c "a && b"` のように複数のコマンドをまとめない（止めたときにビルドの本体が残ることがある。スクリプトは Java 9 以上なら子のプロセスまで止めるが、Java 8 では止められない）
+   - コマンドの中のパスは相対パスにする（プロジェクトをコピーするときは、コピーの中で実行される）
+   - `-DconfigDirectory`・`-DserverXmlFile`・`-DgenerateToSrc` はコマンドに書かない（Maven のときはスクリプトが付け足す）
    - Maven：`./mvnw compile liberty:generate-features`
    - Gradle：`./gradlew classes generateFeatures`
+   - Maven の multi-module：`./mvnw -pl <module> -am compile io.openliberty.tools:liberty-maven-plugin:<version>:generate-features`
+     - `<module>` は Liberty プラグインを適用しているモジュール、`<version>` はそのモジュールが使う liberty-maven-plugin のバージョン（`<module>` の pom.xml か、親の pom.xml の `<pluginManagement>` に書かれている）
+     - `liberty:generate-features` と書くと、親の pom.xml が Liberty プラグインを宣言していない場合に失敗する（`No plugin found for prefix 'liberty'`）。バージョンを省くと、プロジェクトの指定ではなく最新版が使われる
+     - generate-features は最も下流のモジュール（`<module>`）でだけ実行され、依存するモジュールのクラスも調べる
    - Gradle の multi-module：`./gradlew :module:classes :module:generateFeatures`
-   - Maven の multi-module：Liberty プラグインを適用しているモジュールで生成する。コンパイルは一時的な変更が要らないので、先にスクリプトの外で実行し、スクリプトには生成だけを渡す
-     1. スクリプトの外で：`./mvnw -pl <module> -am compile`
-     2. スクリプトに渡す：`./mvnw -pl <module> liberty:generate-features`
-     - 2 で依存するモジュールが見つからない場合は、1 を `./mvnw -pl <module> -am install -DskipTests` にする。構成によって必要な手順が違うので、失敗したらプロジェクトの README などを確認する
 3. 実行する（`<スクリプト>` は手順 1 で見つけたパス。出力ディレクトリは Maven なら `target/liberty-feature-min`、Gradle なら `build/liberty-feature-min`）
    - Java 11 以上：
      ```bash
@@ -238,23 +244,31 @@ liberty-maven-plugin 3.12.2 で確認した挙動（Gradle プラグインは未
      java -cp target/liberty-feature-min/classes GenerateRequiredFeatures --server-xml src/main/liberty/config/server.xml \
          --out target/liberty-feature-min -- ./mvnw compile liberty:generate-features
      ```
+   - コピーの作り方はスクリプトが決める（`MODE`）
+     - `CONFIG_COPY`（Maven）：構成ディレクトリだけをコピーし、`-DconfigDirectory` と `-DserverXmlFile` でコピーを指定する。ビルドは元のプロジェクトで行う
+     - `PROJECT_COPY`（Gradle、または pom.xml で `<configDirectory>` / `<serverXmlFile>` を指定している Maven。pom.xml の指定は `-D` より優先されるため）：プロジェクトをコピーし、コピーの中でビルドする。`.git` とビルドの出力（`target/`、`build/`、`.gradle/`）はコピーしないので、フルビルドになる
+     - どちらも、構成ディレクトリの外にある include 先はコピーに含め、include の場所をコピーを指すように書き換える
    - ビルドの制限時間は既定で 30 分（`--timeout-minutes N` で変更できる）
 4. 出力（`KEY=VALUE` 形式）を読む
-   - `COMMENTED_OUT=<ファイル>: <feature>`：いま書かれている feature と platform（一時的に外したもの）
+   - `MODE` / `MODE_REASON`：コピーの作り方と、その理由
+   - `DECLARED=<ファイル>: <feature>`：いま書かれている feature と platform（コピーで外したもの。元のファイルは変更していない）
    - `GENERATED_BEFORE_FEATURE=<feature>`：既存の generated-features.xml に書かれていた feature
-   - `REQUIRED_FEATURE=<feature>`：アプリが使う API から見た必要な feature（`generated-features.required.xml` にも保存される）
-   - `RESTORED=<ファイル>`：元に戻したファイル
+   - `REQUIRED=<ファイル>` と `REQUIRED_FEATURE=<feature>`：アプリが使う API から見た必要な feature（`generated-features.required.xml` にも保存される）。`REQUIRED=<ファイル>` があって `REQUIRED_FEATURE` が 1 つも無ければ、API から必要と判定された feature は無い。`REQUIRED=NONE` は結果が無いことを示す
+   - `CHANGED_ORIGINAL=<ファイル>`：実行のあいだに元のファイルが変わった（スクリプトは書かないので、ビルドかほかのプログラムが書いた）。**必ずユーザーに伝え**、`git diff` などで確かめてもらう
+   - `GENERATED_FILE=<ファイル>`：コピー以外の場所に書かれた generated-features.xml。`target/` や `build/` の中ならビルドの出力なので問題ない（Liberty プラグインの次の版は、サーバーのディレクトリにも書く）。それ以外の場所ならユーザーに伝える
    - `RESULT`：
-     - `OK`：生成して元に戻した
-     - `BUILD_FAILED`：生成に失敗した（元には戻した）。`BUILD_LOG_TAIL` と `build.log` を見て「生成失敗時」に従う
-     - `INTERRUPTED`：途中で止められた（元には戻した）
-     - `ERROR`：生成しなかった（何も変更していない、または変更を元に戻した）。`CATEGORY` を見る
-       - `PREVIOUS_RUN_NOT_RESTORED`：前回の実行が強制終了されて元に戻っていない。表示された `RESTORE_COMMAND` をそのまま実行してからやり直す
-       - `IO_ERROR`：ファイルを読み書きできなかった（読み取り専用のファイルなど）。`MESSAGE` をユーザーに伝える
-     - `RESTORE_FAILED`：**元に戻せなかった。** 分析を続けず、`RESTORE_FAILED=` のファイルと `RESTORE_COMMAND` を必ずユーザーに伝える
-   - `RESTORE_COMMAND` には、実行したスクリプトの場所（コンパイルして実行した場合はクラスの場所）が入っているので、そのまま実行できる
-   - `RESULT` の行が無い場合（スクリプトが強制終了されたなど）は、元に戻っていない可能性がある。`RESTORE_COMMAND` があればそれを、無ければ手順 3 と同じ `java` コマンドで `--restore <出力ディレクトリ>` を実行する（戻すものが無ければ `RESULT=NOTHING_TO_RESTORE`）
-5. git 管理下なら、`git status` で src 側に変更が残っていないことを確認し、結果を出力に書く
+     - `OK`：生成した
+     - `BUILD_FAILED`：生成に失敗した。`BUILD_LOG_TAIL` と `build.log` を見て「生成失敗時」に従う
+     - `INTERRUPTED`：途中で止められた
+     - `ERROR`：生成しなかった、または結果を使えない。`CATEGORY` を見る
+       - `NOT_GENERATED_IN_COPY`：ビルドは成功したが、generate-features がコピーを使わなかった（プラグインの設定で generate-features を飛ばしている、ビルドの設定で構成の場所を絶対パスにしている、など）。結果は使わず、`GENERATED_FILE`・`CHANGED_ORIGINAL`・`build.log` から分かる原因を報告し、静的分析のみにする
+       - `NOT_BUILD_ROOT`：ビルドのルートで実行していない。`MESSAGE` のディレクトリに移ってやり直す
+       - `BAD_COMMAND`：コマンドにプロジェクトの絶対パスがある。相対パスに直してやり直す
+       - `SERVER_XML_OUTSIDE_PROJECT`：プロジェクトをコピーする場合に、server.xml がプロジェクトの外にある。静的分析のみにして、その理由を報告する
+       - `LEFTOVER_MARK`：元のファイルに、このスキルの以前の版が一時的にコメントアウトした跡（`liberty-feature-min:`）が残っている。**ユーザーに伝え**、git などで元に戻してもらってからやり直す
+       - `IO_ERROR`：ファイルを読み書きできなかった。`MESSAGE` をユーザーに伝える
+   - スクリプトが強制終了されても、元のファイルは変わっていない。出力ディレクトリの `work`（コピー）が残るが、次の実行で削除される
+5. git 管理下なら、`git status` で src 側に変更が無いことを確認し、結果を出力に書く
 
 ※ generated-features.xml そのものを更新したいとユーザーが明示した場合だけ、通常の生成コマンド（手順 2）をそのまま実行してよい。その場合は、個別に書かれている feature は出力されないこと、versionless の構成では失敗することを先に伝える。
 
@@ -262,7 +276,7 @@ liberty-maven-plugin 3.12.2 で確認した挙動（Gradle プラグインは未
 
 ## 生成失敗時
 
-中断しない（スクリプトが元に戻したことを確認してから分析に進む）
+中断しない（生成できなかった分は、静的分析で補う）
 
 分類：
 
@@ -272,6 +286,7 @@ liberty-maven-plugin 3.12.2 で確認した挙動（Gradle プラグインは未
 * パス不整合
 * Java問題
 * multi-module 問題
+* コピーの中のビルドの問題（`PROJECT_COPY` のとき。`.git` が無いと動かないプラグイン、プロジェクトの外を参照するビルド（Gradle の `includeBuild("../...")` など））
 * バージョン判定の失敗（feature の指定をすべて外したため、pom.xml に Jakarta EE / MicroProfile の API 依存が無いと、バージョンを判定できない）
 
 → 最小修正案提示。生成できなかった場合は、静的分析の結果だけで案を作り、信頼度を下げる
@@ -284,7 +299,7 @@ liberty-maven-plugin 3.12.2 で確認した挙動（Gradle プラグインは未
 
 整理して出すもの：
 
-* 現在の指定（`COMMENTED_OUT` と `GENERATED_BEFORE_FEATURE`。どのファイル由来かも）
+* 現在の指定（`DECLARED` と `GENERATED_BEFORE_FEATURE`。どのファイル由来かも）
   * 個別の feature
   * 集約 feature
   * `<platform>` の指定（server.env の `PREFERRED_PLATFORM_VERSIONS` を含む）
@@ -369,7 +384,7 @@ feature 名とバージョンは、**必ず `reference/feature-matrix.md` の対
 注意：
 
 * 書き方の規則（`<platform>` の数、名前の付け方、`PREFERRED_PLATFORM_VERSIONS`）は `reference/feature-matrix.md` の「versionless feature と platform」に従う
-* versionless の構成では、通常の生成コマンドは失敗する（スクリプトは feature の指定をすべて外すので生成できる）
+* versionless の構成では、通常の生成コマンドは失敗する（スクリプトはコピーで feature の指定をすべて外すので生成できる）
 
 ---
 
@@ -424,7 +439,7 @@ feature 名とバージョンは、**必ず `reference/feature-matrix.md` の対
 1. **対象と前提**
    - 対象の server.xml、ビルドツール、module
    - 生成の方法（スクリプトで生成 / 前回の結果を再利用（日時）/ 生成しなかった理由）と、スクリプトの `RESULT`
-   - 一時的に変更したファイルと、元に戻したことの確認結果（`RESTORED`、`git status`）
+   - コピーの作り方（`MODE`）と、元のファイルが変更されていないことの確認結果（`CHANGED_ORIGINAL` が無いこと、`git status`）
 2. **サマリー**
    - 現在の feature 数 → 最小案（案B）の feature 数
    - 削除候補と要確認の件数

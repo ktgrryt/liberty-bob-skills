@@ -101,7 +101,7 @@ server.xml の feature を最小化して
 | Skill | ファイル編集 | コマンド実行 | 推奨モード |
 | --- | --- | --- | --- |
 | `liberty-doctor` | しない | 読み取り系のみ（ポートの LISTEN 確認など） | Agent（Ask ではポート確認を省略） |
-| `liberty-feature-min` | 生成のあいだだけ server.xml などを一時的に変更し、終了時に元に戻す（最終的には変更しない） | ビルド（`liberty:generate-features` / `generateFeatures`） | Agent |
+| `liberty-feature-min` | しない（生成は構成ファイルのコピーで行う） | ビルド（`liberty:generate-features` / `generateFeatures`） | Agent |
 | `liberty-env-vars-audit` | しない | しない | Ask / Agent |
 | `liberty-feature-add` | server.xml / pom.xml / build.gradle を編集する（差分を示してから） | しない | Agent |
 | `liberty-datasource-create` | pom.xml / server.xml を編集する（差分を示してから） | ドライバーの取得と接続チェック（`mvn` / `java`） | Agent |
@@ -150,7 +150,7 @@ liberty-feature-min で、前回の結果を使わずに生成し直して（--f
 **主な機能**:
 
 * アプリが使う API から見た必要な feature の一覧を生成（Maven / Gradle 対応。Skill のフォルダにある `scripts/GenerateRequiredFeatures.java` を使います。JDK が必要です）
-  * 生成のあいだ、書かれている feature を一時的に外し、終了時に必ず元に戻します（失敗した場合や Ctrl+C で止めた場合も含む。ファイルの更新日時も元に戻します）
+  * 構成ファイルのコピーを作り、コピーの feature を外して生成します。元の server.xml などは変更しません（Gradle と、pom.xml で構成の場所を指定している Maven では、プロジェクトをまるごとコピーしてビルドします）
   * 使っていない feature の検出や、versionless の構成での生成にも対応します
 * server.xml との差分分析
 * 削除候補・残すべき feature の分類
